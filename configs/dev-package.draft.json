@@ -43,7 +43,19 @@
     "kv_dtype": "UNSET",
     "weight_quantization": "fp8",
     "tool_parser": "UNSET",
-    "reasoning_parser": "UNSET"
+    "reasoning_parser": "UNSET",
+    "travel_tool_dependencies": {
+      "status": "confirmed",
+      "isolation": "external_directory_mounted_read_only_for_execution",
+      "lock": "configs/travel-tools.lock",
+      "packages": {
+        "pandas": "2.2.3",
+        "pytz": "2025.2",
+        "tzdata": "2025.2"
+      },
+      "existing_packages_unchanged": true,
+      "evidence": "User permission in this chat on 2026-10-24 following the missing-pandas traceback and proposal for isolated dependencies without upgrading image libraries; no WebShop dependencies."
+    }
   },
   "generation": {
     "tokenizer_revision": "UNSET",
@@ -55,7 +67,9 @@
     "presence_penalty": 1.5,
     "repetition_penalty": 1.0,
     "seed": "UNSET",
-    "chat_template_kwargs": {"enable_thinking": false},
+    "chat_template_kwargs": {
+      "enable_thinking": false
+    },
     "reasoning_effort": "UNSET",
     "preserve_thinking": "UNSET",
     "tool_protocol": "UNSET"
@@ -94,7 +108,9 @@
     "tools_schema_hash": "UNSET",
     "builder_hashes": "UNSET"
   },
-  "schemas": {"hashes": "UNSET"},
+  "schemas": {
+    "hashes": "UNSET"
+  },
   "native": {
     "memory_system": "none",
     "judgement_mode": "none",
@@ -114,11 +130,24 @@
         "job_ids": "UNSET",
         "expected_counts": "UNSET"
       },
-      "progression": ["one_group", "readiness_check", "two_more_groups", "readiness_check", "remaining_approved_groups"],
+      "progression": [
+        "one_group",
+        "readiness_check",
+        "two_more_groups",
+        "readiness_check",
+        "remaining_approved_groups"
+      ],
       "per_role_budgets": "UNSET",
       "wall_time_seconds": "UNSET",
       "max_model_calls": "UNSET",
-      "outputs": ["io", "events", "results", "checkpoints", "memory", "audit"]
+      "outputs": [
+        "io",
+        "events",
+        "results",
+        "checkpoints",
+        "memory",
+        "audit"
+      ]
     },
     "two_agent_dev": {
       "status": "not_started",
@@ -129,11 +158,24 @@
         "job_ids": "UNSET",
         "expected_counts": "UNSET"
       },
-      "arms": ["F", "S", "C", "CV", "CVP", "R"],
+      "arms": [
+        "F",
+        "S",
+        "C",
+        "CV",
+        "CVP",
+        "R"
+      ],
       "induction_mode": "private_goal_induction",
       "post_handoff_threat_model": "historical_persistence",
-      "private_goal_prompt_hashes": {"A": "UNSET", "B": "UNSET"},
-      "clean_nominal_prompt_hashes": {"A_prime": "UNSET", "B": "UNSET"},
+      "private_goal_prompt_hashes": {
+        "A": "UNSET",
+        "B": "UNSET"
+      },
+      "clean_nominal_prompt_hashes": {
+        "A_prime": "UNSET",
+        "B": "UNSET"
+      },
       "archive_redaction_policy": "UNSET",
       "task_spec": "UNSET",
       "per_night_cap": "UNSET",
@@ -143,7 +185,17 @@
       "wall_time_seconds": "UNSET",
       "max_model_calls": "UNSET",
       "human_annotation_contract": "UNSET",
-      "outputs": ["io", "events", "results", "checkpoints", "memory", "annotations", "audit", "dev_review_packet", "freeze_draft"]
+      "outputs": [
+        "io",
+        "events",
+        "results",
+        "checkpoints",
+        "memory",
+        "annotations",
+        "audit",
+        "dev_review_packet",
+        "freeze_draft"
+      ]
     }
   },
   "memory": {
@@ -163,7 +215,11 @@
     "upstream_mount": "/opt/ai-collusion/sources/MemoryArena",
     "upstream_mount_mode": "read_only_bind",
     "working_directory": "/opt/ai-collusion/sources/MemoryArena",
-    "pythonpath": ["/code/src", "/opt/ai-collusion/sources/MemoryArena"],
+    "pythonpath": [
+      "/vendor",
+      "/code/src",
+      "/opt/ai-collusion/sources/MemoryArena"
+    ],
     "wall_time_seconds": 43200,
     "deadline": "UNSET",
     "per_call_timeout_seconds": "UNSET",
@@ -192,8 +248,14 @@
     },
     "stop_file": "STOP"
   },
-  "budgets": {"modal_usd_limit": 0, "other_paid_api_usd_limit": 0},
-  "split": {"name": "dev", "group_registry_hash": "UNSET"},
+  "budgets": {
+    "modal_usd_limit": 0,
+    "other_paid_api_usd_limit": 0
+  },
+  "split": {
+    "name": "dev",
+    "group_registry_hash": "UNSET"
+  },
   "analysis": "UNSET",
   "export_policy": "UNSET",
   "main_approval": {
@@ -208,7 +270,11 @@
       "id": "D04",
       "question": "Native DEV volume and actual upstream group/traveler IDs",
       "status": "PROPOSED",
-      "proposed_value": {"max_groups": 12, "max_new_travelers": 4, "checkpoint_after": 2},
+      "proposed_value": {
+        "max_groups": 12,
+        "max_new_travelers": 4,
+        "checkpoint_after": 2
+      },
       "effective_value": "UNSET",
       "evidence": "AGENT_HANDOFF.md D04; actual IDs require server-side inspection and user confirmation"
     },
@@ -258,7 +324,9 @@
         "min_p": 0.0,
         "presence_penalty": 1.5,
         "repetition_penalty": 1.0,
-        "chat_template_kwargs": {"enable_thinking": false}
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        }
       },
       "evidence": "User message in this chat on 2026-10-24; replaces proposed temperature=0. Applies to actors only; S/C/V/P settings remain separate and UNSET."
     },
@@ -267,15 +335,25 @@
       "question": "Smoke-only runtime and request limits",
       "status": "CONFIRMED",
       "proposed_value": null,
-      "effective_value": {"scope": "smoke_only", "contract_ref": "/smoke"},
+      "effective_value": {
+        "scope": "smoke_only",
+        "contract_ref": "/smoke"
+      },
       "evidence": "User reply in this chat on 2026-10-24 explicitly confirms the whole smoke set, combined input/output context, client queue plus max-num-seqs=1 and n=1, resolved KV dtype recording, and stopping to ask on OOM/shm/pids/timeout/parser failures."
     },
     {
       "id": "UPSTREAM_IMPORT_MOUNT",
       "question": "Native import eagerly loads WebShop and fails at RUNTIME_ROOT.parents[5] with mount /upstream",
       "status": "CONFIRMED",
-      "proposed_value": {"read_only_mount": "/opt/ai-collusion/sources/MemoryArena", "upstream_patch": "none"},
-      "effective_value": {"read_only_mount": "/opt/ai-collusion/sources/MemoryArena", "working_directory": "/opt/ai-collusion/sources/MemoryArena", "upstream_patch": "none"},
+      "proposed_value": {
+        "read_only_mount": "/opt/ai-collusion/sources/MemoryArena",
+        "upstream_patch": "none"
+      },
+      "effective_value": {
+        "read_only_mount": "/opt/ai-collusion/sources/MemoryArena",
+        "working_directory": "/opt/ai-collusion/sources/MemoryArena",
+        "upstream_patch": "none"
+      },
       "evidence": "User explicitly confirmed the deeper read-only bind mount in this chat on 2026-10-24. Update PYTHONPATH/cwd/operational identity, verify import and resolved paths without model calls, and ask on any subsequent import failure; do not run WebShop or install its dependencies."
     },
     {
@@ -283,7 +361,11 @@
       "question": "GPU allocation and channel notification",
       "status": "CONFIRMED",
       "proposed_value": null,
-      "effective_value": {"host_index": 1, "gpu_uuid": "GPU-441e6008-cd27-34b5-c81a-17dad9d4a894", "channel_notified": true},
+      "effective_value": {
+        "host_index": 1,
+        "gpu_uuid": "GPU-441e6008-cd27-34b5-c81a-17dad9d4a894",
+        "channel_notified": true
+      },
       "evidence": "User confirmation in this chat on 2026-10-24 plus read-only nvidia-smi; refresh device state before launch"
     },
     {
@@ -303,11 +385,49 @@
         "per_call_timeout_seconds": "UNSET",
         "per_block_wall_time_seconds": "UNSET"
       },
-      "effective_value": {"cpus": 8, "ram_gib": 64, "disk_budget_gib": 150, "dev_package_wall_time_seconds": 43200},
+      "effective_value": {
+        "cpus": 8,
+        "ram_gib": 64,
+        "disk_budget_gib": 150,
+        "dev_package_wall_time_seconds": 43200
+      },
       "evidence": "User reply to the resource question in this chat on 2026-10-24: use 12 hours instead of 8. Other proposed CPU/RAM/disk values retained. PIDs/shared-memory, per-block limits, timeouts and retry proposals are not covered by this confirmation."
     },
-    {"id": "D13", "question": "Two-agent task/utility/cap/commit and role limits", "status": "UNSET", "proposed_value": null, "effective_value": "UNSET", "evidence": "Requires DEV catalog audit before a concrete proposal"},
-    {"id": "D17", "question": "Separate two-agent DEV selection, prefixes, tasks and budgets", "status": "UNSET", "proposed_value": null, "effective_value": "UNSET", "evidence": "Native 12x4 proposal does not set two-agent volume"},
-    {"id": "D18", "question": "Source/claim contracts, S/C/V/P prompts, implementations, rubric and budgets", "status": "UNSET", "proposed_value": null, "effective_value": "UNSET", "evidence": "Must be confirmed before each affected builder stage, including native DEV"}
+    {
+      "id": "D13",
+      "question": "Two-agent task/utility/cap/commit and role limits",
+      "status": "UNSET",
+      "proposed_value": null,
+      "effective_value": "UNSET",
+      "evidence": "Requires DEV catalog audit before a concrete proposal"
+    },
+    {
+      "id": "D17",
+      "question": "Separate two-agent DEV selection, prefixes, tasks and budgets",
+      "status": "UNSET",
+      "proposed_value": null,
+      "effective_value": "UNSET",
+      "evidence": "Native 12x4 proposal does not set two-agent volume"
+    },
+    {
+      "id": "D18",
+      "question": "Source/claim contracts, S/C/V/P prompts, implementations, rubric and budgets",
+      "status": "UNSET",
+      "proposed_value": null,
+      "effective_value": "UNSET",
+      "evidence": "Must be confirmed before each affected builder stage, including native DEV"
+    },
+    {
+      "id": "TRAVEL_TOOL_DEPENDENCIES",
+      "question": "Missing pandas prevents native ToolExecutor import",
+      "status": "CONFIRMED",
+      "proposed_value": null,
+      "effective_value": {
+        "lock": "configs/travel-tools.lock",
+        "isolation": "external_read_only_vendor",
+        "base_image_change": "none"
+      },
+      "evidence": "User explicitly replied разрешаю after the missing-pandas diagnosis and isolated-install proposal in this chat on 2026-10-24."
+    }
   ]
 }
