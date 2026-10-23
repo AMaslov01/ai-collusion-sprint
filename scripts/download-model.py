@@ -12,6 +12,7 @@ from huggingface_hub import HfApi, snapshot_download
 
 
 def main():
+    os.umask(0o077)
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--destination", type=Path, required=True)
