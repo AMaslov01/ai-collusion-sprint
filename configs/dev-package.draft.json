@@ -17,21 +17,28 @@
     "revision": "da1a37c8b19280e18627ca01cf368195a5e1d92e",
     "config": "group_travel_planner",
     "file_hashes": "UNSET",
-    "flight_csv_sha256": "UNSET"
+    "flight_csv_sha256": "8dafdb0e3f8b79ce599a1e612a772865295bc226b46e5fb278368f7255b11cee",
+    "tool_input_manifest": {
+      "path": "/mnt/ssd/a.maslov/ai-collusion-sprint/bootstrap/preparation-31f9c028bd8615c4b7648144c278ed0d6ffbe56c/catalog-identity.json",
+      "sha256": "a60735991b66e8da0fa6022a94d5cdacefb10119a9efc11b7ee0512e5243b95f"
+    }
   },
   "catalogs": "UNSET",
   "model": {
     "repo": "Qwen/Qwen3.8-27B-FP8",
     "revision": "017b9c7af6b5689d5dd426a76e0bc077eb5ca20a",
     "served_alias": "UNSET",
-    "weight_hashes": "UNSET"
+    "weight_hashes": {
+      "path": "/mnt/ssd/a.maslov/ai-collusion-sprint/bootstrap/preparation-31f9c028bd8615c4b7648144c278ed0d6ffbe56c/model-identity.json",
+      "sha256": "061fe5123d3c186860f3ced51e8623ba2959950c9b728c48318adc8827c12a92"
+    }
   },
   "runtime": {
     "image_digest": "sha256:6ee133356d49ed24cee03dd0cda3d3980279a11c107ce3e752c89e76540f41c9",
     "image_repository": "vllm/vllm-openai",
-    "image_id": "UNSET",
+    "image_id": "sha256:bd8a5d7a8774800c92d714c0c226b32c1863f929150f36efd610aebcd12a335d",
     "vllm_version": "0.32.0",
-    "driver": "UNSET",
+    "driver": "580.178.04",
     "tensor_parallel_size": "UNSET",
     "kv_dtype": "UNSET",
     "weight_quantization": "fp8",
@@ -176,7 +183,7 @@
     "transfer_bwlimit_kib_per_second": 5000,
     "current_transfer_override": {
       "mode": "night_unlimited",
-      "scope": "current_image_and_model_downloads",
+      "scope": "current_preparation_downloads",
       "evidence": "User instruction in this chat on 2026-10-24: it is currently night and downloads may run without a speed restriction. Not a standing exemption for future daytime transfers."
     },
     "stop_file": "STOP"
@@ -250,6 +257,22 @@
         "chat_template_kwargs": {"enable_thinking": false}
       },
       "evidence": "User message in this chat on 2026-10-24; replaces proposed temperature=0. Applies to actors only; S/C/V/P settings remain separate and UNSET."
+    },
+    {
+      "id": "D20",
+      "question": "Smoke-only runtime and request limits",
+      "status": "CONFIRMED",
+      "proposed_value": null,
+      "effective_value": {"scope": "smoke_only", "contract_ref": "/smoke"},
+      "evidence": "User reply in this chat on 2026-10-24 explicitly confirms the whole smoke set, combined input/output context, client queue plus max-num-seqs=1 and n=1, resolved KV dtype recording, and stopping to ask on OOM/shm/pids/timeout/parser failures."
+    },
+    {
+      "id": "UPSTREAM_IMPORT_MOUNT",
+      "question": "Native import eagerly loads WebShop and fails at RUNTIME_ROOT.parents[5] with mount /upstream",
+      "status": "PROPOSED",
+      "proposed_value": {"read_only_mount": "/opt/ai-collusion/sources/MemoryArena", "upstream_patch": "none"},
+      "effective_value": "UNSET",
+      "evidence": "Question sent to the user in this chat; no approval received yet. Failure precedes all model calls; native gateway fixtures have not run."
     },
     {
       "id": "D12_GPU",
