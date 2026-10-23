@@ -171,7 +171,7 @@ class ActorGatewayTests(unittest.TestCase):
     def test_builders_do_not_inherit_actor_sampler(self):
         native = self.client(lambda request: httpx.Response(200, json=fixture_response()))
         self.context["role"] = "V"
-        with self.assertRaises(openai.APIConnectionError):
+        with self.assertRaisesRegex(ValueError, "Actor sampler cannot be applied to memory builders"):
             native.client.chat.completions.create(
                 model="qwen-fixture", messages=[{"role": "user", "content": "fixture"}],
             )
