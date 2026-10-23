@@ -10,9 +10,9 @@
 |---|---|
 | Upstream | `https://github.com/ZexueHe/MemoryArena`, commit `6cd9de14b71915e39ac742a20dc33785e14b6aab` |
 | Tasks | HF `ZexueHe/memoryarena`, revision `da1a37c8b19280e18627ca01cf368195a5e1d92e`, config `group_travel_planner` |
-| Первый model candidate | HF `Qwen/Qwen3.8-27B-FP8`, revision `017b9c7af6b5689d5dd426a76e0bc077eb5ca20a` |
+| Целевая модель DEV | HF `Qwen/Qwen3.8-27B-FP8`, revision `017b9c7af6b5689d5dd426a76e0bc077eb5ca20a` |
 | Hardware | Одна фактически предоставленная L40; UUID/свободная память/драйвер проверяются перед исполнением |
-| Runtime/image | **UNSET.** Исполнитель подготавливает конкретное предложение совместимого runtime/image с первичными источниками и задаёт вопрос пользователю. После ответа записывает version + immutable digest и проводит smoke-test; самостоятельно выбирать образ нельзя |
+| Runtime/image DEV | vLLM `0.32.0`, tag commit `5df63a7203cdb9328d824a27b682e77c7b9928be`; immutable digest брать из исполняемого manifest — по сообщению пользователя он уже записан. Сам digest в этом документе не приводился и не проверялся. Перед run проверить соответствие версии/образа и smoke на L40 TP1; другой runtime/image самостоятельно не выбирать |
 
 Проверять upstream SHA и checksums скачанных файлов; cache snapshot не означает, что revision действительно совпадает. Веса/каталоги не коммитить в Git. Код адаптера и patches — в репозитории с собственным commit/hash; не менять upstream checkout незаметно.
 
@@ -34,6 +34,7 @@
 | Native сохранение только по завершении группы | Добавить атомарную запись после каждого traveler и snapshot после второго |
 | `AgentResult.success=True` | Отдельно вычислять protocol/parse validity, completion и task score |
 | Client default tool-call `max_tokens=32768` | Экспонировать и проверять настоящий output cap; при общем context 32K этот default не оставлять |
+| Native client явно передаёт `temperature=0.0` | Override должен попасть в фактический gateway request. Одно поле manifest, `agent.temperature` или server defaults не меняет жёстко заданный native sampler |
 | `max_steps` и output cap — разные параметры | Явно ограничить оба, а также суммарные токены/время задачи |
 | `set_base_person` заново задаёт system prompt | Проверять фактические messages; собственная role-policy не должна пропасть |
 | ToolExecutor создаёт все tools | Нужен внешний flight CSV даже при selected lodging-only задаче |
@@ -133,13 +134,64 @@ Scientific fingerprint покрывает всё, что меняет наблю
 
 ## 5. L40 и model smoke-test
 
-Первый кандидат — официальный FP8 checkpoint: опубликованные weights суммарно около 30.87 GB. [Model files](https://huggingface.co/Qwen/Qwen3.8-27B-FP8/tree/017b9c7af6b5689d5dd426a76e0bc077eb5ca20a). У L40 48 GB памяти; фактическую карту проверить, а не опираться на прежнее обсуждение H100. [NVIDIA L40](https://www.nvidia.com/en-us/data-center/l40/).
+Выбран официальный FP8 checkpoint: опубликованные weights суммарно около 30.87 GB. [Model files](https://huggingface.co/Qwen/Qwen3.8-27B-FP8/tree/017b9c7af6b5689d5dd426a76e0bc077eb5ca20a). У L40 48 GB памяти; фактическую карту проверить, а не опираться на прежнее обсуждение H100. [NVIDIA L40](https://www.nvidia.com/en-us/data-center/l40/).
 
-FP8 weights не подразумевают FP8 KV cache. Предложенная стартовая конфигурация: без отдельной KV-квантизации, TP=1, concurrency=1, context 32 768; включить в конкретный вопрос о run-config и выполнить после ответа. Не применять Blackwell-specific NVFP4/MXFP4 flags к Ada. Помещение весов само по себе не доказывает, что runtime + buffers + заданный context влезут.
+FP8 weights не подразумевают FP8 KV cache. Для обязательного smoke-test подтверждена конфигурация §5.1: без отдельной KV-квантизации, TP=1, concurrency=1, context 32 768. Применение этих лимитов к остальному DEV вне smoke явно отразить в согласованном run-config; самостоятельно расширять scope нельзя. Не применять Blackwell-specific NVFP4/MXFP4 flags к Ada. Помещение весов само по себе не доказывает, что runtime + buffers + заданный context влезут.
 
-Официальный [vLLM recipe](https://recipes.vllm.ai/Qwen/Qwen3.8-27B) указывает tool parser `qwen3_coder`, reasoning parser `qwen3`; сверить с согласованной версией runtime. Его Blackwell-рекомендации не являются подтверждением L40 TP1. Не подставлять старый `hermes` автоматически. Версию/образ согласовать до run, pin digest; `latest` не является воспроизводимой identity.
+Официальный [vLLM recipe](https://recipes.vllm.ai/Qwen/Qwen3.8-27B) указывает tool parser `qwen3_coder`, reasoning parser `qwen3`; проверить в выбранном [vLLM 0.32.0](https://github.com/vllm-project/vllm/releases/tag/v0.32.0). Blackwell-рекомендации не являются подтверждением L40 TP1. Не подставлять старый `hermes` автоматически. Использовать закреплённый digest; `latest` не является воспроизводимой identity.
 
-Предложения стартовых параметров DEV: temperature 0, max output 4 096 на call, max steps 30 на traveler, reserve output внутри 32K, concurrency 1. Thinking mode — `UNSET`: предложить документированный вариант для конкретного template/runtime и получить ответ пользователя до первого data call. Несовместимость не даёт права выбрать другой mode самостоятельно. Остальные не подтверждённые параметры также включить в вопрос о run-config. Main настройки отдельно согласовываются после DEV.
+Для A/B (включая native A) зафиксирован **полный официальный non-thinking sampler** из [pinned model README](https://huggingface.co/Qwen/Qwen3.8-27B-FP8/blob/017b9c7af6b5689d5dd426a76e0bc077eb5ca20a/README.md#best-practices):
+
+```yaml
+actor_generation:
+  temperature: 0.7
+  top_p: 0.8
+  top_k: 20
+  min_p: 0.0
+  presence_penalty: 1.5
+  repetition_penalty: 1.0
+  chat_template_kwargs:
+    enable_thinking: false
+```
+
+Это заменяет прежнее предложение temperature=0. `enable_thinking` — boolean; в vLLM передаётся через `chat_template_kwargs`, а не текстовой инструкцией. Флаг выключения thinking сам не выбирает sampler: [generation_config checkpoint](https://huggingface.co/Qwen/Qwen3.8-27B-FP8/blob/017b9c7af6b5689d5dd426a76e0bc077eb5ca20a/generation_config.json) имеет другие defaults. Все перечисленные значения явно передать в request, используя поддерживаемые vLLM extra fields там, где их нет в стандартном клиентском API.
+
+Проверить effective serialized gateway requests: native [OpenAIClient](https://github.com/ZexueHe/MemoryArena/blob/6cd9de14b71915e39ac742a20dc33785e14b6aab/env/env_systems/travel_planner_env/clients/openai_client.py) задаёт temperature=0.0, поэтому одного server/manifest setting недостаточно. Добавить fixture, что запросы A/B действительно содержат выбранный sampler и отключённый thinking; одинаковые параметры во всех memory arms. Seeds/cache/actual I/O сохраняются; sampler не гарантирует побитового повторения новой генерации.
+
+Лимиты smoke определены ниже; max steps 30 на traveler и остальные не подтверждённые параметры/объёмы DEV остаются предложениями и входят в вопрос о run-config. Sampler S/C/V/P не наследует actor settings молча: его задаёт отдельный component manifest. Main-конфигурация по-прежнему требует одобрения после DEV; выбор sampler/runtime/smoke settings не снимает этот gate.
+
+### 5.1. Подтверждённый contract обязательного smoke-test
+
+```yaml
+smoke:
+  tensor_parallel_size: 1
+  max_model_len: 32768
+  client_concurrency: 1
+  max_num_seqs: 1
+  completions_per_request: 1
+  max_output_tokens_per_call: 4096
+  kv_cache_dtype: auto
+  gpu_memory_utilization: 0.90
+  tool_call_parser: qwen3_coder
+  reasoning_parser: qwen3
+  seed: 42
+  request_timeout_seconds: 900
+  shared_memory_bytes: 8589934592
+  pids_limit: 1024
+```
+
+Это подтверждённая конфигурация **smoke**, а не гарантия успешного старта и не авторизация всего DEV/test. Модель/runtime/digest и sampler берутся из предыдущих разделов. Семантика:
+
+- Context 32768 включает вход и выход. При reserve 4096 фактический input (system/messages/tools/template) максимум 28672 токена; переполнение не исправлять молчаливым усечением.
+- Concurrency=1 обеспечивается клиентской очередью, `--max-num-seqs 1` в vLLM и `n=1` в requests; одна клиентская корутина сама по себе не фиксирует размеры server buffers/graph capture. Tools/model calls smoke последовательны.
+- `kv_cache_dtype=auto` не включает отдельную KV-квантизацию. Записать effective KV dtype из resolved engine config; не считать FP8 weights доказательством FP8 KV. Не подменять его FP8 при нехватке памяти.
+- `gpu_memory_utilization=0.90` задаёт бюджет executor, а не гарантированный hard cap всей CUDA-памяти. Не задавать конфликтующий explicit `kv_cache_memory_bytes`, который переопределяет эту настройку. Фактическую память измерить.
+- Seed=42 записать как engine seed и seed фактических smoke requests; это не гарантия побитового повторения и не main seed schedule. Reasoning parser сам по себе не включает thinking: `enable_thinking=false` остаётся в каждом запросе.
+- Timeout 900 с относится к одной model request attempt; не является deadline всего smoke, startup, download или DEV-пакета. Attempts/retries и общий deadline должны быть согласованы отдельно; timeout не даёт права на дублирующее изменение state.
+- Docker shared memory — собственный `/dev/shm` размером 8 GiB (`--shm-size=8g`), без подмены `--ipc=host`; `--pids-limit=1024`. Эти значения — стартовые лимиты для проверки, не доказательство достаточности при любом числе CPU threads.
+- При OOM, нехватке shm/pids, parser failure или timeout сохранить диагностику и спросить людей; самостоятельно увеличивать память/лимиты, уменьшать context или менять backend нельзя.
+
+Смысл engine settings: [vLLM 0.32.0 engine arguments](https://docs.vllm.ai/en/v0.32.0/configuration/engine_args/); shared memory: [vLLM Docker](https://docs.vllm.ai/en/v0.32.0/deployment/docker/). Это schema contract, не готовая полная Docker-команда: GPU UUID/CPU/RAM/mounts/доступы берутся из серверных инструкций пользователя.
 
 Smoke sequence:
 
@@ -278,5 +330,7 @@ Deployment-cost метода включает extraction/V/P/summary и continua
 | I15 | Human approval gate | Отсутствующий receipt, неподтверждённый ответ или несовпадающий freeze hash блокируют main-prefixes/continuations и main-resume |
 | I16 | Questions | UNSET/PROPOSED или новая неопределённость блокируют зависимую операцию до ответа; fallback и самовольных изменений нет |
 | I17 | Whole-package readiness | Оба DEV block contracts и audit готовы, review packet содержит их реальные результаты; один native отчёт не помечает пакет завершённым |
+| I18 | Effective actor sampler | Фактические native A и A/B requests содержат sampler §5 и boolean enable_thinking=false, не hardcoded temperature=0; settings совпадают между memory arms |
+| I19 | Smoke contract | Resolved engine/Docker/request settings совпадают с §5.1; input/output budget, один request/sequence/completion, dtype, seed, timeout, shm/pids проверены; отклонения не исправляются самовольно |
 
 Для изменения научного runner/evaluator эти проверки нужны: здесь потеря журнала или ошибка одного поля меняет исследовательский результат. Не добавлять tests ради покрытия простых Markdown-правок.
