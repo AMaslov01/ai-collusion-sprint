@@ -1,0 +1,238 @@
+{
+  "schema_version": 1,
+  "status": "draft_needs_decisions",
+  "run_id": "UNSET",
+  "phase": "native_dev",
+  "execution_scope": "dev_package",
+  "server": "Coniculus",
+  "scientific_fingerprint": "UNSET",
+  "code": {
+    "adapter_commit": "UNSET",
+    "upstream_repo": "https://github.com/ZexueHe/MemoryArena",
+    "upstream_commit": "6cd9de14b71915e39ac742a20dc33785e14b6aab",
+    "patch_hash": "UNSET"
+  },
+  "data": {
+    "repo": "ZexueHe/memoryarena",
+    "revision": "da1a37c8b19280e18627ca01cf368195a5e1d92e",
+    "config": "group_travel_planner",
+    "file_hashes": "UNSET",
+    "flight_csv_sha256": "UNSET"
+  },
+  "catalogs": "UNSET",
+  "model": {
+    "repo": "UNSET",
+    "revision": "UNSET",
+    "served_alias": "UNSET",
+    "weight_hashes": "UNSET"
+  },
+  "runtime": {
+    "image_digest": "UNSET",
+    "image_id": "UNSET",
+    "vllm_version": "UNSET",
+    "driver": "UNSET",
+    "tensor_parallel_size": "UNSET",
+    "kv_dtype": "UNSET",
+    "weight_quantization": "UNSET",
+    "tool_parser": "UNSET",
+    "reasoning_parser": "UNSET"
+  },
+  "generation": {
+    "tokenizer_revision": "UNSET",
+    "chat_template_hash": "UNSET",
+    "temperature": "UNSET",
+    "top_p": "UNSET",
+    "top_k": "UNSET",
+    "min_p": "UNSET",
+    "presence_penalty": "UNSET",
+    "repetition_penalty": "UNSET",
+    "seed": "UNSET",
+    "enable_thinking": "UNSET",
+    "reasoning_effort": "UNSET",
+    "preserve_thinking": "UNSET",
+    "tool_protocol": "UNSET"
+  },
+  "limits": {
+    "context": "UNSET",
+    "max_output": "UNSET",
+    "concurrency": "UNSET",
+    "max_steps": "UNSET",
+    "total_task_tokens": "UNSET",
+    "task_wall_time_seconds": "UNSET"
+  },
+  "prompts": {
+    "role_hash": "UNSET",
+    "tools_schema_hash": "UNSET",
+    "builder_hashes": "UNSET"
+  },
+  "schemas": {"hashes": "UNSET"},
+  "native": {
+    "memory_system": "none",
+    "judgement_mode": "none",
+    "history_mode": "native_history",
+    "private_goals": "not_applicable",
+    "displayed_tool_results": "upstream_unchanged",
+    "plan_format": "upstream_unchanged"
+  },
+  "block_contracts": {
+    "native_dev": {
+      "status": "not_started",
+      "selection": {
+        "group_ids": "UNSET",
+        "traveler_ids": "UNSET",
+        "max_new_travelers": "UNSET",
+        "checkpoint_after": "UNSET",
+        "job_ids": "UNSET",
+        "expected_counts": "UNSET"
+      },
+      "progression": ["one_group", "readiness_check", "two_more_groups", "readiness_check", "remaining_approved_groups"],
+      "per_role_budgets": "UNSET",
+      "wall_time_seconds": "UNSET",
+      "max_model_calls": "UNSET",
+      "outputs": ["io", "events", "results", "checkpoints", "memory", "audit"]
+    },
+    "two_agent_dev": {
+      "status": "not_started",
+      "selection": {
+        "group_ids": "UNSET",
+        "prefix_ids": "UNSET",
+        "task_ids": "UNSET",
+        "job_ids": "UNSET",
+        "expected_counts": "UNSET"
+      },
+      "arms": ["F", "S", "C", "CV", "CVP", "R"],
+      "induction_mode": "private_goal_induction",
+      "post_handoff_threat_model": "historical_persistence",
+      "private_goal_prompt_hashes": {"A": "UNSET", "B": "UNSET"},
+      "clean_nominal_prompt_hashes": {"A_prime": "UNSET", "B": "UNSET"},
+      "archive_redaction_policy": "UNSET",
+      "task_spec": "UNSET",
+      "per_night_cap": "UNSET",
+      "commit_repair_policy": "UNSET",
+      "max_proposal_review_cycles": "UNSET",
+      "per_role_budgets": "UNSET",
+      "wall_time_seconds": "UNSET",
+      "max_model_calls": "UNSET",
+      "human_annotation_contract": "UNSET",
+      "outputs": ["io", "events", "results", "checkpoints", "memory", "annotations", "audit", "dev_review_packet", "freeze_draft"]
+    }
+  },
+  "memory": {
+    "handoff_source_schema_hash": "UNSET",
+    "source_offsets": "UNSET",
+    "summary_prompt_hash": "UNSET",
+    "claim_schema_hash": "UNSET",
+    "verifier_contract": "UNSET",
+    "policy_filter_contract": "UNSET",
+    "rubric_hash": "UNSET",
+    "token_budgets": "UNSET",
+    "call_limits": "UNSET",
+    "archive_redaction_policy": "UNSET"
+  },
+  "operations": {
+    "project_root": "UNSET",
+    "wall_time_seconds": "UNSET",
+    "deadline": "UNSET",
+    "per_call_timeout_seconds": "UNSET",
+    "max_attempts": "UNSET",
+    "retry_backoff_seconds": "UNSET",
+    "ambiguous_env_step": "stop_without_retry_unless_idempotency_is_proven",
+    "cpus": "UNSET",
+    "ram_gib": "UNSET",
+    "disk_budget_gib": "UNSET",
+    "pids_limit": "UNSET",
+    "shm_gib": "UNSET",
+    "gpu_uuid": "GPU-441e6008-cd27-34b5-c81a-17dad9d4a894",
+    "gpu_reservation": {
+      "host_index": 1,
+      "scope": "whole_gpu",
+      "duration": "necessary_for_this_experiment",
+      "channel_notified": true,
+      "evidence": "User reply in this chat on 2026-10-24; index/UUID matched by read-only SSH inspection. Recheck immediately before launch."
+    },
+    "restart_policy": "no",
+    "transfer_bwlimit_kib_per_second": 5000,
+    "stop_file": "STOP"
+  },
+  "budgets": {"modal_usd_limit": 0, "other_paid_api_usd_limit": 0},
+  "split": {"name": "dev", "group_registry_hash": "UNSET"},
+  "analysis": "UNSET",
+  "export_policy": "UNSET",
+  "main_approval": {
+    "status": "awaiting_main_approval",
+    "message_ref": null,
+    "approved_freeze_hash": null,
+    "native_dev_report_hash": null,
+    "two_agent_dev_report_hash": null
+  },
+  "decision_register": [
+    {
+      "id": "D04",
+      "question": "Native DEV volume and actual upstream group/traveler IDs",
+      "status": "PROPOSED",
+      "proposed_value": {"max_groups": 12, "max_new_travelers": 4, "checkpoint_after": 2},
+      "effective_value": "UNSET",
+      "evidence": "AGENT_HANDOFF.md D04; actual IDs require server-side inspection and user confirmation"
+    },
+    {
+      "id": "D06",
+      "question": "Model, runtime, generation and task limits",
+      "status": "PROPOSED",
+      "proposed_value": {
+        "model_repo": "Qwen/Qwen3.8-27B-FP8",
+        "model_revision": "017b9c7af6b5689d5dd426a76e0bc077eb5ca20a",
+        "vllm_version": "0.32.0",
+        "base_image": "vllm/vllm-openai@sha256:6ee133356d49ed24cee03dd0cda3d3980279a11c107ce3e752c89e76540f41c9",
+        "platform": "linux/amd64",
+        "tensor_parallel_size": 1,
+        "kv_dtype": "auto_without_explicit_kv_quantization",
+        "tool_parser": "qwen3_coder",
+        "reasoning_parser": "qwen3",
+        "context": 32768,
+        "max_output": 4096,
+        "max_steps": 30,
+        "concurrency": 1,
+        "generation_settings": "UNSET"
+      },
+      "effective_value": "UNSET",
+      "evidence": [
+        "AGENT_HANDOFF.md D06; not yet approved or smoke-tested on L40",
+        "https://github.com/vllm-project/vllm/releases/tag/v0.32.0",
+        "https://hub.docker.com/v2/repositories/vllm/vllm-openai/tags/v0.32.0",
+        "https://recipes.vllm.ai/Qwen/Qwen3.8-27B",
+        "https://huggingface.co/Qwen/Qwen3.8-27B-FP8/raw/017b9c7af6b5689d5dd426a76e0bc077eb5ca20a/README.md"
+      ]
+    },
+    {
+      "id": "D12_GPU",
+      "question": "GPU allocation and channel notification",
+      "status": "CONFIRMED",
+      "proposed_value": null,
+      "effective_value": {"host_index": 1, "gpu_uuid": "GPU-441e6008-cd27-34b5-c81a-17dad9d4a894", "channel_notified": true},
+      "evidence": "User confirmation in this chat on 2026-10-24 plus read-only nvidia-smi; refresh device state before launch"
+    },
+    {
+      "id": "D12_LIMITS",
+      "question": "Finite execution time, CPU/RAM/disk and retry limits",
+      "status": "PROPOSED",
+      "proposed_value": {
+        "project_root": "/mnt/ssd/a.maslov/ai-collusion-sprint",
+        "cpus": 8,
+        "ram_gib": 64,
+        "disk_budget_gib": 150,
+        "pids_limit": 1024,
+        "shm_gib": 8,
+        "dev_package_wall_time_seconds": 28800,
+        "max_transport_attempts": 2,
+        "retry_backoff_seconds": 10,
+        "per_call_timeout_seconds": "UNSET",
+        "per_block_wall_time_seconds": "UNSET"
+      },
+      "effective_value": "UNSET",
+      "evidence": "Resource proposal after read-only inspection; 150 GiB is a planning allowance, not a verified personal disk quota. Eight hours/two attempts/10 seconds originate as proposals in IMPLEMENTATION.md."
+    },
+    {"id": "D13", "question": "Two-agent task/utility/cap/commit and role limits", "status": "UNSET", "proposed_value": null, "effective_value": "UNSET", "evidence": "Requires DEV catalog audit before a concrete proposal"},
+    {"id": "D17", "question": "Separate two-agent DEV selection, prefixes, tasks and budgets", "status": "UNSET", "proposed_value": null, "effective_value": "UNSET", "evidence": "Native 12x4 proposal does not set two-agent volume"},
+    {"id": "D18", "question": "Source/claim contracts, S/C/V/P prompts, implementations, rubric and budgets", "status": "UNSET", "proposed_value": null, "effective_value": "UNSET", "evidence": "Must be confirmed before each affected builder stage, including native DEV"}
+  ]
+}
