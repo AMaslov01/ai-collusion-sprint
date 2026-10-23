@@ -80,6 +80,7 @@ def main():
     parser.add_argument("--upstream", type=Path, required=True)
     parser.add_argument("--destination", type=Path, required=True)
     parser.add_argument("--identity", type=Path, required=True)
+    parser.add_argument("--adapter-commit", required=True)
     args = parser.parse_args()
     if os.getuid() == 0:
         raise RuntimeError("Must run in non-root Docker")
@@ -104,6 +105,7 @@ def main():
                     digest.update(chunk)
             files.append({"path": str(path.relative_to(args.destination)), "bytes": path.stat().st_size, "sha256": digest.hexdigest()})
     identity = {
+        "adapter_commit": args.adapter_commit,
         "upstream_commit": "6cd9de14b71915e39ac742a20dc33785e14b6aab",
         "flight_source": {
             "folder": f"https://drive.google.com/drive/folders/{DRIVE_FOLDER}",
