@@ -57,6 +57,15 @@ class ActorGatewayTests(unittest.TestCase):
         module = importlib.import_module(
             "env.env_systems.travel_planner_env.clients.openai_client"
         )
+        paths = importlib.import_module(
+            "env.env_systems.web_shopping_env.runtime.runtime_paths"
+        )
+        expected_root = Path("/opt/ai-collusion/sources/MemoryArena")
+        if upstream != expected_root or paths.MEMORYARENA_ROOT != expected_root:
+            raise RuntimeError("Unexpected resolved MEMORYARENA_ROOT")
+        if paths.WORKSPACE_ROOT != Path("/opt/ai-collusion"):
+            raise RuntimeError("Unexpected resolved WORKSPACE_ROOT")
+        print(f"Verified upstream import: MEMORYARENA_ROOT={paths.MEMORYARENA_ROOT}; WORKSPACE_ROOT={paths.WORKSPACE_ROOT}", flush=True)
         cls.native_client_class = module.OpenAIClient
 
     def setUp(self):

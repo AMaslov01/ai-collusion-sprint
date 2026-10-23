@@ -160,6 +160,10 @@
   },
   "operations": {
     "project_root": "/mnt/ssd/a.maslov/ai-collusion-sprint",
+    "upstream_mount": "/opt/ai-collusion/sources/MemoryArena",
+    "upstream_mount_mode": "read_only_bind",
+    "working_directory": "/opt/ai-collusion/sources/MemoryArena",
+    "pythonpath": ["/code/src", "/opt/ai-collusion/sources/MemoryArena"],
     "wall_time_seconds": 43200,
     "deadline": "UNSET",
     "per_call_timeout_seconds": "UNSET",
@@ -269,10 +273,10 @@
     {
       "id": "UPSTREAM_IMPORT_MOUNT",
       "question": "Native import eagerly loads WebShop and fails at RUNTIME_ROOT.parents[5] with mount /upstream",
-      "status": "PROPOSED",
+      "status": "CONFIRMED",
       "proposed_value": {"read_only_mount": "/opt/ai-collusion/sources/MemoryArena", "upstream_patch": "none"},
-      "effective_value": "UNSET",
-      "evidence": "Question sent to the user in this chat; no approval received yet. Failure precedes all model calls; native gateway fixtures have not run."
+      "effective_value": {"read_only_mount": "/opt/ai-collusion/sources/MemoryArena", "working_directory": "/opt/ai-collusion/sources/MemoryArena", "upstream_patch": "none"},
+      "evidence": "User explicitly confirmed the deeper read-only bind mount in this chat on 2026-10-24. Update PYTHONPATH/cwd/operational identity, verify import and resolved paths without model calls, and ask on any subsequent import failure; do not run WebShop or install its dependencies."
     },
     {
       "id": "D12_GPU",

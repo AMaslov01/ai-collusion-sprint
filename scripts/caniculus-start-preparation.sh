@@ -11,6 +11,7 @@ test "$(id -u)" -ne 0
 umask 077
 CAN_PROJECT=/mnt/ssd/a.maslov/ai-collusion-sprint
 CAN_CODE="$CAN_PROJECT/code/$CAN_CODE_SHA"
+CAN_UPSTREAM_MOUNT=/opt/ai-collusion/sources/MemoryArena
 CAN_MODEL="$CAN_PROJECT/inputs/Qwen3.8-27B-FP8/017b9c7af6b5689d5dd426a76e0bc077eb5ca20a"
 CAN_WORK="$CAN_PROJECT/bootstrap/preparation-$CAN_CODE_SHA"
 CAN_CONTROL="$CAN_PROJECT/bootstrap/control"
@@ -44,9 +45,10 @@ docker run -d --name "$CAN_NAME" --label owner=a.maslov \
   --env NVIDIA_VISIBLE_DEVICES=void --env CUDA_VISIBLE_DEVICES= \
   --env HOME=/work/home --env HF_HOME=/cache/hf --env XDG_CACHE_HOME=/cache/xdg \
   --env UV_CACHE_DIR=/cache/uv --env PYTHONDONTWRITEBYTECODE=1 \
-  --env MEMORYARENA_ROOT=/upstream --env PYTHONPATH=/code/src:/upstream \
+  --env MEMORYARENA_ROOT="$CAN_UPSTREAM_MOUNT" --env "PYTHONPATH=/code/src:$CAN_UPSTREAM_MOUNT" \
+  --workdir "$CAN_UPSTREAM_MOUNT" \
   --mount "type=bind,src=$CAN_CODE,dst=/code,readonly" \
-  --mount "type=bind,src=$CAN_PROJECT/inputs/MemoryArena,dst=/upstream,readonly" \
+  --mount "type=bind,src=$CAN_PROJECT/inputs/MemoryArena,dst=$CAN_UPSTREAM_MOUNT,readonly" \
   --mount "type=bind,src=$CAN_MODEL,dst=/model" \
   --mount "type=bind,src=$CAN_PROJECT/cache,dst=/cache" \
   --mount "type=bind,src=$CAN_WORK,dst=/work" \
