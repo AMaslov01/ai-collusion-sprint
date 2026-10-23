@@ -2,8 +2,8 @@
 # Launch once after caniculus-prepare.sh and transfer of this committed snapshot.
 set -euo pipefail
 CAN_CODE_SHA=${1:?Pass the full adapter commit SHA}
-CAN_STAGE=${2:?Choose checks or download}
-case "$CAN_STAGE" in checks|download) ;; *) exit 2 ;; esac
+CAN_STAGE=${2:?Choose checks, download or registry}
+case "$CAN_STAGE" in checks|download|registry) ;; *) exit 2 ;; esac
 [[ "$CAN_CODE_SHA" =~ ^[0-9a-f]{40}$ ]]
 test "$(hostname)" = caniculus.appliedai.local
 test "$(id -un)" = a.maslov
@@ -55,5 +55,5 @@ docker run -d --name "$CAN_NAME" --label owner=a.maslov \
   --mount "type=bind,src=$CAN_CONTROL,dst=/control,readonly" \
   --entrypoint /usr/bin/timeout "$CAN_IMAGE_ID" \
   --signal=TERM --kill-after=30s "${CAN_REMAINING}s" /bin/bash -c \
-  'set -e; umask 077; test ! -e /control/STOP; if [ "$1" = checks ]; then exec python3 -m unittest discover -s /code/tests -v > /work/unittest.log 2>&1; else exec python3 /code/scripts/download-model.py --config /code/configs/dev-package.draft.json --destination /model --identity /work/model-identity.json > /work/download.log 2>&1; fi' \
+  'set -e; umask 077; test ! -e /control/STOP; case "$1" in checks) exec python3 -m unittest discover -s /code/tests -v > /work/unittest.log 2>&1 ;; download) exec python3 /code/scripts/download-model.py --config /code/configs/dev-package.draft.json --destination /model --identity /work/model-identity.json > /work/download.log 2>&1 ;; registry) exec python3 /code/scripts/prepare-dev-registry.py --destination /work/task-data > /work/registry.log 2>&1 ;; esac' \
   -- "$CAN_STAGE"
