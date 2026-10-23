@@ -54,7 +54,14 @@
         "tzdata": "2025.2"
       },
       "existing_packages_unchanged": true,
-      "evidence": "User permission in this chat on 2026-10-24 following the missing-pandas traceback and proposal for isolated dependencies without upgrading image libraries; no WebShop dependencies."
+      "evidence": "User permission in this chat on 2026-10-24 following the missing-pandas traceback and proposal for isolated dependencies without upgrading image libraries; no WebShop dependencies.",
+      "identity": {
+        "path": "/mnt/ssd/a.maslov/ai-collusion-sprint/bootstrap/tools-check-67b043b8c95741639cef088793ab674f9d2b2ca7/travel-tools-identity.json",
+        "sha256": "d23eb92bade5b8212a6bb32856e68686c039de6d93a4e128bce2cf5fd36a5508",
+        "native_import": "passed",
+        "tool_executor": "passed",
+        "model_calls": 0
+      }
     }
   },
   "generation": {
@@ -101,7 +108,25 @@
     "pids_limit": 1024,
     "transport_attempts_per_request": 1,
     "on_failure": "save_diagnostics_and_ask_user_without_changing_parameters",
-    "approval_evidence": "User reply in this chat on 2026-10-24 confirming the whole smoke parameter set; concurrency enforced in client queue, max-num-seqs and n=1. No DEV expansion or main approval implied."
+    "approval_evidence": "User reply in this chat on 2026-10-24 confirming the whole smoke parameter set; concurrency enforced in client queue, max-num-seqs and n=1. No DEV expansion or main approval implied.",
+    "health_check": {
+      "scope": "technical_smoke_only",
+      "served_alias": "qwen-smoke",
+      "endpoint": "http://127.0.0.1:18083",
+      "max_model_attempts": 3,
+      "sequence": [
+        "simple_answer",
+        "AccommodationSearch_Rockford",
+        "exact_tool_result_then_final_plan"
+      ],
+      "native_dev_started": false,
+      "main_started": false
+    },
+    "cli_preflight": {
+      "gpu_help_exit_code": 0,
+      "path": "/mnt/ssd/a.maslov/ai-collusion-sprint/bootstrap/smoke-gpu-preflight/vllm-serve-help.txt",
+      "cpu_only_help": "Device inference failed without a GPU; the same immutable image CLI passed with the approved GPU1. No model loaded."
+    }
   },
   "prompts": {
     "role_hash": "UNSET",
