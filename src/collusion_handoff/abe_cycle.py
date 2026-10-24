@@ -17,6 +17,13 @@ from .artifacts import append_event, atomic_json, canonical, fingerprint, read_j
 from .catalog import load_accommodations
 from .cycle_budget import AccountingFailure, BudgetExceeded, ContextOverflow
 from .memory import require
+from .model_gateway import SAMPLER_FIELDS
+
+
+def actor_generation(base):
+    generation = {key: deepcopy(base["generation"][key]) for key in (*SAMPLER_FIELDS, "seed", "chat_template_kwargs")}
+    generation["n"] = 1
+    return generation
 from .memory_v4 import constrained_payload
 
 
@@ -39,7 +46,7 @@ def prepare_registry(config, selected_ids):
 def actor_generator(config, base, budget, job, allocation, *, expected_initial_request=None):
     from .readiness_cycle import content
     def generate(role, messages, schema, logical_id, deadline, remaining):
-        body = constrained_payload("qwen-native-dev", base["generation"], messages, schema, config["limits"]["actor_max_output_tokens"])
+        body = constrained_payload("qwen-native-dev", actor_generation(base), messages, schema, config["limits"]["actor_max_output_tokens"])
         if expected_initial_request is not None and not (job / "io/requests.jsonl").exists():
             require(body == expected_initial_request, "Actual first actor request differs from reviewed full wire")
         try:
@@ -148,7 +155,7 @@ def actor_preflight(config, base, assets, work, selected_ids):
             runner.add(role, "user", "issued_task", canonical({"current_public_task": public_task(task)}).decode(), "user")
         schema = action_schema("A", tools_allowed=True)
         messages = runner.messages("A", schema)
-        body = constrained_payload("qwen-native-dev", base["generation"], messages, schema, config["limits"]["actor_max_output_tokens"])
+        body = constrained_payload("qwen-native-dev", actor_generation(base), messages, schema, config["limits"]["actor_max_output_tokens"])
         count = len(tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, enable_thinking=False, return_dict=False))
         require(count + body["max_tokens"] <= 32768, "Initial actor request cannot fit")
         probes[str(group_id)] = {"request": body, "request_sha256": fingerprint(body), "rendered_input_tokens": count}

@@ -6,10 +6,21 @@ import unittest
 from collusion_handoff.abe_protocol import Protocol
 from collusion_handoff.abe_runner import BranchRunner, ServiceFailure
 from collusion_handoff.artifacts import fingerprint, read_json
+from collusion_handoff.abe_cycle import actor_generation
+from collusion_handoff.model_gateway import SAMPLER_FIELDS
 from test_abe_protocol import fixture_task
 
 
 class RecipientTests(unittest.TestCase):
+    def test_actual_actor_sampler_excludes_registry_metadata_and_unset_fields(self):
+        root = Path(__file__).resolve().parents[1]
+        base = read_json(root / "configs/dev-package.draft.json")
+        generation = actor_generation(base)
+        self.assertEqual(set(generation), set(SAMPLER_FIELDS) | {"seed", "n", "chat_template_kwargs"})
+        self.assertNotIn("UNSET", json.dumps(generation))
+        self.assertEqual(generation["temperature"], 0.7)
+        self.assertFalse(generation["chat_template_kwargs"]["enable_thinking"])
+
     def settings(self):
         return read_json(Path(__file__).resolve().parents[1] / "configs/readiness-cycle-v4.json")["limits"]
 
