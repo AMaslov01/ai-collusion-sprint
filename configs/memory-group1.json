@@ -291,10 +291,10 @@
     "scope": "Only group1 checkpoint2 memory prototype; original native deadline unchanged for all other work"
   },
   "execution_gate": {
-    "status": "stopped_needs_human_parser_decision",
+    "status": "prototype_built_needs_independent_human_annotation",
     "question_thread_id": "01a1688e-8fee-7140-b505-6f93e571c740",
     "question_call_id": "call_5a915b0161a642db899a954b7f3ee81c",
-    "last_verified_code": "99c5118bdfcfd7c8e986ce4d5fc2f3ac4491faa7",
+    "last_verified_code": "95dbf82ef2539b11b582f1369fe4356c6aba84bf",
     "source_archive_sha256": "d99a521528ec85f2010b30a7a9e165df97ec55d2c5c4dc7b2987279180df8017",
     "full_source_rendered_input_tokens": {
       "S": 33230,
@@ -305,8 +305,10 @@
       "C": 14365
     },
     "compact_projection_enabled": true,
-    "new_model_calls": 1,
-    "unit_tests_passed": 23
+    "new_model_calls": 4,
+    "unit_tests_passed": 23,
+    "remaining_model_attempts": 0,
+    "next_step": "Independent human source-first annotation; further groups, A/B and main remain outside this completed computation scope"
   },
   "model_view_approval_evidence": {
     "status": "verified_actual_human_reply",
@@ -378,5 +380,115 @@
     "two_agent_dev_started": false,
     "main_started": false,
     "next_step": "Wait for actual human parser decision; no retry, fence removal, new inference or scope extension is authorized by this record"
+  },
+  "format_recovery_result": {
+    "status": "built_format_recovery_variant_needs_independent_human_annotation",
+    "scope": "native_group1_cp2_cached_format_recovery_and_remaining_stages_only",
+    "adapter_commit": "95dbf82ef2539b11b582f1369fe4356c6aba84bf",
+    "run_path": "/mnt/ssd/a.maslov/ai-collusion-sprint/runs/memory-group1-cp2-format-v2",
+    "plan_sha256": "f49caf224d17c80a2566037fc5d22a3de2b3aa9dd0e3de3a565dd59121ea60a5",
+    "source_archive_sha256": "d99a521528ec85f2010b30a7a9e165df97ec55d2c5c4dc7b2987279180df8017",
+    "cumulative_model_attempts": 4,
+    "new_model_attempts": 3,
+    "cached_S_reused": true,
+    "retries": 0,
+    "usage": {
+      "input_plus_output_tokens": 66781,
+      "rendered_input_counts": [
+        14075,
+        14365,
+        16467,
+        16605
+      ]
+    },
+    "raw_C_claims": 10,
+    "packed_C_claims": 10,
+    "CV_claims": 10,
+    "CVP_claims": 10,
+    "V_errors": 0,
+    "P_errors": 0,
+    "excluded_by_budget": 0,
+    "original_strict_S_failure_preserved": true,
+    "report_sha256": "6818a283658084c3d3e90c03250309f856d36a8efc8162b7cbddfd09bb24cde2",
+    "request_ledger_sha256": "9dc00c5904e11050d73e24eed029d72898bd6e69dd5257686a7cb756e22ef2cb",
+    "response_ledger_sha256": "9dcde9483d6d82cf5544f57db736de1b6520ff98e70e75a68b215a1a14206a5c",
+    "cache_audit": {
+      "status": "passed_cache_only",
+      "replayed_artifacts": 16,
+      "parent_strict_failure_reproduced": "JSONDecodeError",
+      "cached_format_recovery_reproduced": true,
+      "new_model_calls": 0,
+      "sha256": "c5050971078a43e0e160b641eb8600133f1964f557a95f83fe9ac12572b13c2c",
+      "path": "/mnt/ssd/a.maslov/ai-collusion-sprint/bootstrap/memory-format-audit-95dbf82ef2539b11b582f1369fe4356c6aba84bf/audit.json"
+    },
+    "unit_tests_passed": 28,
+    "sampled_peak_vram_mib": 40003,
+    "gpu_after_mib": 0,
+    "human_completed_forms": 0,
+    "human_metrics": "pending_independent_source_first_annotation",
+    "groups2_12_started": false,
+    "two_agent_dev_started": false,
+    "main_started": false
+  },
+  "delivery_result": {
+    "status": "passed_lossless_delivery_packaging",
+    "adapter_commit": "332077f630b7e33e352f19376d10a1c3c15fb25b",
+    "path": "/mnt/ssd/a.maslov/ai-collusion-sprint/runs/memory-group1-cp2-delivery-v1",
+    "manifest_sha256": "cfd7f51a2259749fab95f1afeed1c5391aeed2fb43aa13d4ccd65e2e5013868d",
+    "new_model_calls": 0,
+    "cumulative_model_attempts": 4,
+    "source_event_count": 25,
+    "source_archive_sha256": "d99a521528ec85f2010b30a7a9e165df97ec55d2c5c4dc7b2987279180df8017",
+    "model_source_view_sha256": "507356c52b405e0db5ba7bff8bd251b441699cfdd8c5a8395c8a9c9f76057fcb",
+    "packages": {
+      "C": {
+        "content_sha256": "3d1fc6eb339c00ba591110cd51a19b7d3214cd7aa0167a9ddd4f2a2443aeb7b5",
+        "content_tokens": 1625,
+        "file_sha256": "d106e3eb35b95989e01e7fd3f2492243b8571f95c62bb6ff222f295bbb066eea",
+        "identical_to_frozen_v2": true
+      },
+      "CV": {
+        "content_sha256": "3d1fc6eb339c00ba591110cd51a19b7d3214cd7aa0167a9ddd4f2a2443aeb7b5",
+        "content_tokens": 1625,
+        "file_sha256": "01e0730d993e89c4022f3cef744db595c8b140ff30238ecdafc36f7950dbf8dc",
+        "identical_to_frozen_v2": true
+      },
+      "CVP": {
+        "content_sha256": "3d1fc6eb339c00ba591110cd51a19b7d3214cd7aa0167a9ddd4f2a2443aeb7b5",
+        "content_tokens": 1625,
+        "file_sha256": "31ecf833e481695105dd9fc16c70ad1a738049a69079754dc6f7f2233803feb3",
+        "identical_to_frozen_v2": true
+      },
+      "F": {
+        "all_source_events_and_text_preserved": true,
+        "content_sha256": "61afdd767e4438e08419555b5573125c8bf34f7738695c02114fcb8b2473de4e",
+        "content_tokens": 13771,
+        "file_sha256": "518b213ccb1baad1e1eea6d9ab2263a3c169f863e738ddb944099fba5570bcb8",
+        "identical_to_frozen_v2": false
+      },
+      "R": {
+        "content_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "content_tokens": 0,
+        "file_sha256": "395b6163e4b8def62bac049b4476be07574977765400f1edb1fb9785fdfde366",
+        "identical_to_frozen_v2": true
+      },
+      "S": {
+        "content_sha256": "6fd1e5c5ce56ff319f8663bd508415257575321ccb6a98a34c47027ee9812d85",
+        "content_tokens": 604,
+        "file_sha256": "1bca04867347d5e3a595e514bed08c6df3b9c3d4891a44610fa99c35a9b52b1e",
+        "identical_to_frozen_v2": true
+      }
+    },
+    "original_oversized_F_preserved": true,
+    "original_F_tokens": 32899,
+    "delivered_F_tokens": 13771,
+    "future_actor_full_request_preflight_still_required": true
+  },
+  "routine_engineering_authority": {
+    "thread_id": "01a1688e-8fee-7140-b505-6f93e571c740",
+    "human_message_id": "01a16d6c-c218-7f30-b48a-aa9dd907486f",
+    "human_text": "слушай, слишком много технических вопросов задаешь, такие вещи разрещаю самому решать",
+    "verification": "Direct read_thread",
+    "scope": "Routine engineering within the approved scientific design, resources, scope and hard budgets; no new scientific arms, metrics, deadlines or main authorization"
   }
 }
