@@ -2,9 +2,9 @@
 # Fixed logical scope: one group1/cp2 example, up to four new attempts, no retries.
 set -euo pipefail
 CAN_CODE_SHA=${1:?Pass full committed code SHA}
-CAN_STAGE=${2:?Choose checks or run}
+CAN_STAGE=${2:?Choose checks, run or audit}
 [[ "$CAN_CODE_SHA" =~ ^[0-9a-f]{40}$ ]]
-case "$CAN_STAGE" in checks|run) ;; *) exit 2 ;; esac
+case "$CAN_STAGE" in checks|run|audit) ;; *) exit 2 ;; esac
 test "$(hostname)" = caniculus.appliedai.local
 test "$(id -un)" = a.maslov
 test "$(id -u)" -ne 0
@@ -39,6 +39,15 @@ for CAN_PATH in "$CAN_PROJECT" "$CAN_CODE" "$CAN_MODEL" "$CAN_VENDOR" "$CAN_IDEN
   test "$(stat -c %u -- "$CAN_PATH")" = "$(id -u)"
 done
 CAN_DEVICE=(--env NVIDIA_VISIBLE_DEVICES=void --env CUDA_VISIBLE_DEVICES=)
+CAN_EXTRA_MOUNTS=()
+if [ "$CAN_STAGE" = audit ]; then
+  CAN_WORK="$CAN_PROJECT/bootstrap/memory-audit-$CAN_CODE_SHA"
+  CAN_NAME="a-maslov-ai-collusion-memory-audit-${CAN_CODE_SHA:0:7}"
+  CAN_COMPLETED="$CAN_PROJECT/runs/memory-group1-cp2-v1"
+  test "$(realpath -- "$CAN_COMPLETED")" = "$CAN_COMPLETED"
+  test "$(stat -c %u -- "$CAN_COMPLETED")" = "$(id -u)"
+  CAN_EXTRA_MOUNTS=(--mount "type=bind,src=$CAN_COMPLETED,dst=/completed,readonly")
+fi
 if [ "$CAN_STAGE" = run ]; then
   CAN_WORK="$CAN_PROJECT/runs/memory-group1-cp2-v1"
   CAN_NAME=a-maslov-ai-collusion-memory-group1-cp2-v1
@@ -84,7 +93,8 @@ docker run -d --name "$CAN_NAME" --label owner=a.maslov --label "adapter_commit=
   --mount "type=bind,src=$CAN_PROJECT/cache,dst=/cache" \
   --mount "type=bind,src=$CAN_WORK,dst=/work" \
   --mount "type=bind,src=$CAN_PROJECT/bootstrap/control,dst=/control,readonly" \
+  "${CAN_EXTRA_MOUNTS[@]}" \
   --entrypoint /usr/bin/timeout "$(cat "$CAN_PROJECT/bootstrap/environment/image-id.txt")" \
   --signal=TERM --kill-after=30s "${CAN_REMAINING}s" /bin/bash -c \
-  'set -e; umask 077; test ! -e /control/STOP; if [ "$1" = checks ]; then python3 -m unittest discover -s /code/tests -v > /work/unittest.log 2>&1; exec python3 -m collusion_handoff.memory_runner --preflight > /work/preflight.log 2>&1; fi; exec python3 -m collusion_handoff.memory_runner > /work/supervisor.log 2>&1' -- "$CAN_STAGE"
+  'set -e; umask 077; test ! -e /control/STOP; if [ "$1" = checks ]; then python3 -m unittest discover -s /code/tests -v > /work/unittest.log 2>&1; exec python3 -m collusion_handoff.memory_runner --preflight > /work/preflight.log 2>&1; fi; if [ "$1" = audit ]; then exec python3 -m collusion_handoff.memory_runner --audit > /work/audit.log 2>&1; fi; exec python3 -m collusion_handoff.memory_runner > /work/supervisor.log 2>&1' -- "$CAN_STAGE"
 docker inspect "$CAN_NAME" > "$CAN_WORK/docker-inspect.json"

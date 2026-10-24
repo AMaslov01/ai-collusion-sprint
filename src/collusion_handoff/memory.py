@@ -145,6 +145,7 @@ def build_packages(source, contract, assets, generate, count_tokens, persist):
         persist(f"packages/{arm}.json", value)
 
     def call(stage, candidates):
+        persist("stages/current.json", {"stage": stage, "status": "preparing_single_attempt"})
         asset = assets[stage]
         messages = stage_messages(stage, archive, source["archive_sha256"], candidates, asset["schema"], asset["prompt"])
         text = generate(stage, messages)

@@ -174,12 +174,19 @@ def report(work=WORK):
     requests, responses = smoke.journal_rows(work / "io/requests.jsonl"), smoke.journal_rows(work / "io/responses.jsonl")
     packages = {path.stem: {key: value for key, value in read_json(path).items() if key not in {"content", "wrapped"}}
                 for path in (work / "automatic-withheld/packages").glob("*.json")}
+    statuses = {arm: packages[arm]["status"] if arm in packages else "not_built" for arm in ("F", "R", "S", "C", "CV", "CVP")}
+    current_path = work / "automatic-withheld/stages/current.json"
+    current = read_json(current_path)["stage"] if current_path.exists() else None
+    affected = {"S": ["S", "C", "CV", "CVP"], "C": ["C", "CV", "CVP"], "V": ["CV", "CVP"], "P": ["CVP"]}.get(current, [])
+    for index, arm in enumerate(affected):
+        if arm not in packages:
+            statuses[arm] = "package_build_failure" if index == 0 else "not_built_due_prior_stage_failure"
     return {"scope": "native_group1_checkpoint2_memory_prototype_only", "finished_at": utc(),
             "model_attempts": len(requests), "received_responses": len(responses), "max_model_attempts": 4,
             "unresolved_attempts": len(requests) - len(responses), "retries": 0,
             "source_archive_sha256": read_json(work / "source.json")["archive_sha256"],
             "plan_sha256": read_json(work / "manifest.json")["plan_sha256"],
-            "packages": packages, "human_completed_forms": 0, "human_metrics": "pending_independent_source_first_annotation",
+            "packages": packages, "package_statuses": statuses, "human_completed_forms": 0, "human_metrics": "pending_independent_source_first_annotation",
             "P_harmful_pass": {"value": None, "denominator": None, "reason": "Source-unit human labels not collected; report N/A if adjudicated denominator is zero"},
             "groups2_12_started": False, "two_agent_dev_started": False, "main_started": False}
 
@@ -214,6 +221,25 @@ def preflight(contract):
                                              enable_thinking=False, return_dict=False)
         require(isinstance(encoded, list) and all(type(token) is int for token in encoded), "Unexpected preliminary tokenizer return type")
         counts[stage] = len(encoded)
+    # Diagnostic projections are measured only, never supplied to an actual builder.
+    diagnostic_views = {}
+    minimal_keys = {"event_id", "role", "event_type", "group_id", "traveler_idx", "turn_idx", "order",
+                    "content", "content_sha256", "origin_event_id", "derived_from"}
+    for name in ("without_delivery_refs_only", "compact_proposed_unapproved"):
+        events = [{key: value for key, value in event.items()
+                   if (key != "delivery_refs" if name == "without_delivery_refs_only" else key in minimal_keys)}
+                  for event in source["archive"]["events"]]
+        diagnostic_views[name] = {}
+        for stage in ("S", "C"):
+            diagnostic_archive = {**source["archive"], "events": events}
+            messages = stage_messages(stage, diagnostic_archive, source["archive_sha256"], [], assets[stage]["schema"], assets[stage]["prompt"])
+            diagnostic_views[name][stage] = len(tokens.apply_chat_template(messages, tokenize=True,
+                add_generation_prompt=True, enable_thinking=False, return_dict=False))
+    atomic_json(WORK / "input-diagnostics.json", {"actual_full_source_counts": counts,
+                "not_authorized_for_inference_diagnostic_views": diagnostic_views,
+                "source_events": len(source["archive"]["events"]), "source_archive_sha256": source["archive_sha256"],
+                "content_removed": False, "events_removed": False, "new_model_calls": 0})
+    for stage in ("S", "C"):
         require(counts[stage] <= contract["limits"]["input_caps"][stage], f"CPU preflight {stage} full input overflow: {counts[stage]}")
     atomic_json(WORK / "preflight.json", {"status": "passed_no_model_calls", "plan_sha256": plan_sha,
                 "source_events": len(source["archive"]["events"]), "prefix_model_attempts": source["prefix_model_attempts"],
@@ -221,17 +247,87 @@ def preflight(contract):
                 "note": "The actual server /tokenize admission check remains mandatory before every builder attempt"})
 
 
+def cache_audit(contract):
+    """Reconstruct using cached JSON responses; there is no inference client here."""
+    completed = Path("/completed")
+    source = read_json(completed / "source.json")
+    require(source == build_source(NATIVE, UPSTREAM), "Source archive changed")
+    manifest = read_json(completed / "manifest.json")
+    require(fingerprint(manifest["plan"]) == manifest["plan_sha256"], "Plan hash mismatch")
+    require(manifest["plan"]["contract_sha256"] == sha256(CONTRACT.read_bytes()).hexdigest(), "Contract changed")
+    assets = assets_for(contract)
+    require(manifest["plan"]["assets_sha256"] == fingerprint(assets), "Prompts or schemas changed")
+    streams = []
+    for name in ("requests", "responses"):
+        path = completed / f"io/{name}.jsonl"
+        content = path.read_bytes() if path.exists() else b""
+        require(not content or content.endswith(b"\n"), "Truncated durable journal; do not infer zero spend")
+        streams.append([strict_json(line) for line in content.decode().splitlines()])
+    requests, responses = streams
+    require(len(requests) <= 4, "Four-attempt ceiling violated")
+    require(len({row["logical_call_id"] for row in requests}) == len(requests), "Repeated logical attempt")
+    require([row["stage"] for row in requests] == list(("S", "C", "V", "P")[:len(requests)]), "Unexpected stage order")
+    by_id = {row["logical_call_id"]: row for row in responses}
+    require(len(by_id) == len(responses), "Duplicate response receipt")
+    for request in requests:
+        payload = strict_json(request["body_utf8"])
+        require(sha256(request["body_utf8"].encode()).hexdigest() == request["request_sha256"], "Wire body hash mismatch")
+        require(request["plan_sha256"] == manifest["plan_sha256"] and request["attempt"] == 1, "Attempt identity differs")
+        expected = {"model": ALIAS, "messages": payload["messages"], **contract["model"]["generation"],
+                    "max_tokens": contract["stages"][request["stage"]]["max_output_tokens"], "stream": False}
+        require(payload == expected, "Actual wire profile changed or includes extra tools/options")
+        require(request["rendered_input_tokens"] <= contract["limits"]["input_caps"][request["stage"]], "Input cap violated")
+    index = 0
+
+    def cached(stage, messages):
+        nonlocal index
+        require(index < len(requests), "No cached next attempt")
+        request = requests[index]
+        index += 1
+        require(request["stage"] == stage and strict_json(request["body_utf8"])["messages"] == messages, "Replay input differs from actual wire")
+        require(request["logical_call_id"] in by_id, "Cached attempt unresolved; spend unknown")
+        response = by_id[request["logical_call_id"]]
+        require(response["request_sha256"] == request["request_sha256"] and response["status_code"] == 200, "Cached response failed")
+        raw = strict_json(response["body_utf8"])
+        require(raw["usage"]["prompt_tokens"] == request["rendered_input_tokens"], "Cached actual input usage mismatch")
+        return raw["choices"][0]["message"]["content"]
+
+    replayed = {}
+    tokens = tokenizer()
+    failure = None
+    try:
+        build_packages(source, contract, assets, cached,
+                       lambda text: len(tokens.encode(text, add_special_tokens=False)), replayed.__setitem__)
+    except Exception as error:
+        failure = {"type": type(error).__name__, "message": str(error)}
+    original = read_json(completed / "report.json")
+    require((failure is None) == (original["status"] == "built_needs_independent_human_annotation"), "Replay success/failure differs")
+    require(index == len(requests), "Cached replay did not consume every admitted attempt")
+    for name, value in replayed.items():
+        if name == "stages/current.json":
+            continue
+        require(value == read_json(completed / "automatic-withheld" / name), f"Cached transform differs: {name}")
+    atomic_json(WORK / "audit.json", {"status": "passed_cache_only", "scope": contract["scope"],
+                "plan_sha256": manifest["plan_sha256"], "source_archive_sha256": source["archive_sha256"],
+                "cached_attempts": len(requests), "replayed_artifacts": len(replayed), "reproduced_failure": failure,
+                "new_model_calls": 0, "human_completed_forms": 0})
+
+
 def main():
     os.umask(0o077)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--client", action="store_true")
     parser.add_argument("--preflight", action="store_true")
+    parser.add_argument("--audit", action="store_true")
     args = parser.parse_args()
     contract = read_json(CONTRACT)
     require(os.getuid() != 0, "Non-root Docker is required")
     with (WORK / "worker.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        if args.preflight:
+        if args.audit:
+            smoke.admission(task_deadline(contract))
+            cache_audit(contract)
+        elif args.preflight:
             preflight(contract)
         elif args.client:
             client(contract)
