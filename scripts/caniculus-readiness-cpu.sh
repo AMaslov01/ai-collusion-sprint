@@ -39,6 +39,7 @@ docker run -d --name "$CAN_NAME" --label owner=a.maslov --label scope=readiness-
  --env HOME=/work/home --env TMPDIR=/work/tmp --env PYTHONDONTWRITEBYTECODE=1 \
  --env HF_HOME=/cache/hf --env HF_HUB_OFFLINE=1 --env TRANSFORMERS_OFFLINE=1 --env XDG_CACHE_HOME=/cache/xdg \
  --env "PYTHONPATH=/vendor:/code/src:$CAN_UPSTREAM" --env MEMORYARENA_ROOT="$CAN_UPSTREAM" --env "ADAPTER_COMMIT=$CAN_SHA" \
+ --env CYCLE_PHASE=development-memory-v1 \
  --mount "type=bind,src=$CAN_CODE,dst=/code,readonly" --mount "type=bind,src=$CAN_BASE,dst=/basecode,readonly" \
  --mount "type=bind,src=$CAN_PROJECT/runs/repair-cycle-v3-20261024,dst=/previous,readonly" \
  --mount "type=bind,src=$CAN_PROJECT/runs/memory-group1-cp2-format-v2,dst=/old,readonly" \
@@ -50,6 +51,6 @@ docker run -d --name "$CAN_NAME" --label owner=a.maslov --label scope=readiness-
  --mount "type=bind,src=$CAN_PROJECT/cache,dst=/cache" --mount "type=bind,src=$CAN_PROJECT/bootstrap/control,dst=/control,readonly" \
  --workdir "$CAN_UPSTREAM" --entrypoint /usr/bin/timeout "$(cat "$CAN_PROJECT/bootstrap/environment/image-id.txt")" \
  --signal=TERM --kill-after=30s "${CAN_REMAINING}s" /bin/bash -c \
- 'set -e; umask 077; test ! -e /control/STOP; python3 -m unittest discover -s /code/tests -v > /work/unittest.log 2>&1; python3 /code/scripts/probe-structured-output.py > /work/probe.log 2>&1; python3 /code/scripts/measure-memory-codec.py > /work/codec.log 2>&1; python3 /code/scripts/prepare-abe-dev.py > /work/abe-preparation.log 2>&1; python3 /code/scripts/run-abe-independent-fixtures.py --fixtures /review-v4/independent-fixtures.json --output /work/independent --adapter-commit "$ADAPTER_COMMIT" --execution-environment "caniculus non-root CPU Docker immutable vLLM0.32.0 image bd8a5d7a8774800c92d714c0c226b32c1863f929150f36efd610aebcd12a335d" > /work/independent.log 2>&1'
+ 'set -e; umask 077; test ! -e /control/STOP; python3 -m unittest discover -s /code/tests -v > /work/unittest.log 2>&1; python3 /code/scripts/probe-structured-output.py > /work/probe.log 2>&1; python3 /code/scripts/measure-memory-codec.py > /work/codec.log 2>&1; python3 /code/scripts/prepare-abe-dev.py > /work/abe-preparation.log 2>&1; python3 -m collusion_handoff.readiness_cycle --preflight > /work/component-preflight.log 2>&1; python3 /code/scripts/run-abe-independent-fixtures.py --fixtures /review-v4/independent-fixtures.json --output /work/independent --adapter-commit "$ADAPTER_COMMIT" --execution-environment "caniculus non-root CPU Docker immutable vLLM0.32.0 image bd8a5d7a8774800c92d714c0c226b32c1863f929150f36efd610aebcd12a335d" > /work/independent.log 2>&1'
 docker inspect "$CAN_NAME" > "$CAN_WORK/docker-inspect.json"
 printf '%s\n' "$CAN_WORK"

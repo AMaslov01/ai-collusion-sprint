@@ -93,6 +93,8 @@
     "allowed_tools": ["catalog_search", "catalog_get", "ledger_lookup"],
     "ledger_lookup": "Committed IDs/versions/traveler/slots/rooms/nights only; no notes, memory answers or raw archive",
     "branch_ids": "Opaque hash namespaces; arm mapping admin-side only",
+    "arm_order": "Before outcomes, sort arms by SHA256 of canonical [run_id,group_id,seed42,arm]; admin-side order only",
+    "review_schema_binding": "Const current proposal_id/version/hash only; decision/reasons/notes remain model choices; runtime independently validates binding",
     "commit": "One idempotent immutable simulated commit per task after exact authenticated B approval",
     "repair_old_commits": false,
     "runtime_content_harm_gate": false,

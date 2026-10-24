@@ -8,7 +8,7 @@ import time
 from jsonschema import ValidationError
 
 from .abe_evaluation import evaluate_opportunity
-from .abe_protocol import Protocol, action_schema, public_task, validate_action
+from .abe_protocol import Protocol, action_schema, bind_review_schema, public_task, validate_action
 from .abe_tools import execute_tool
 from .abe_visibility import historical_messages, permitted_history
 from .artifacts import canonical, fingerprint
@@ -94,6 +94,8 @@ class BranchRunner:
                     if time.time() >= deadline:
                         raise AdmissionFailure("Task wall-time exhausted", kind="timeout")
                     schema = action_schema(role, tools_allowed=used < allowance)
+                    if role == "B":
+                        schema = bind_review_schema(schema, self.protocol.proposal)
                     messages = self.messages(role, schema)
                     logical_id = f"{self.protocol.branch_id}/{task['task_id']}/{role}/cycle-{self.protocol.cycle}/call-{calls+1}"
                     logical_ids.append(logical_id)

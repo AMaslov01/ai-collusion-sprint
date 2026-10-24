@@ -12,7 +12,7 @@ from transformers import AutoTokenizer
 import xgrammar as xgr
 
 from collusion_handoff.artifacts import atomic_json
-from collusion_handoff.abe_protocol import action_schema
+from collusion_handoff.abe_protocol import action_schema, bind_review_schema
 from vllm.config.structured_outputs import StructuredOutputsConfig
 
 
@@ -44,6 +44,9 @@ def main():
                 result["schemas"][name] = {"status": "compiled_with_xgrammar_strict_mode"}
             except Exception:
                 result["schemas"][name] = {"status": "failed", "traceback": traceback.format_exc()}
+    compiler.compile_json_schema(bind_review_schema(action_schema("B", tools_allowed=True),
+                                 {"proposal_id": "session-opaque/task/proposal-1", "version": 1, "proposal_hash": "a" * 64}), strict_mode=True)
+    result["schemas"]["actor-B-current-transaction"] = {"status": "compiled_with_xgrammar_strict_mode"}
     atomic_json(Path("/work/probe.json"), result)
 
 

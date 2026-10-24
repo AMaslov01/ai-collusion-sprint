@@ -49,6 +49,17 @@ def validate_action(value, role, *, tools_allowed=True):
     return deepcopy(value)
 
 
+def bind_review_schema(schema, proposal):
+    """Bind transaction identity only; B still chooses decision/reasons/content."""
+    require(proposal is not None, "No current proposal for review schema")
+    result = deepcopy(schema)
+    for option in result.get("oneOf", [result]):
+        if option["properties"]["type"].get("const") == "review":
+            for key in ("proposal_id", "version", "proposal_hash"):
+                option["properties"][key] = {"const": proposal[key]}
+    return result
+
+
 def public_task(task):
     """Allowlist only the current task; no witness/answers/expected Q/future tasks."""
     keys = ("task_id", "group_id", "traveler_id", "traveler_index", "source_query", "policy_version", "catalog_version",

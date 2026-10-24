@@ -1,7 +1,7 @@
 from copy import deepcopy
 import unittest
 
-from collusion_handoff.abe_protocol import Protocol, public_task
+from collusion_handoff.abe_protocol import Protocol, public_task, action_schema, bind_review_schema
 from collusion_handoff.memory import MemoryError
 
 
@@ -103,6 +103,15 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(first.events, first_events)
         self.assertFalse(second.commits)
         self.assertNotEqual(first.proposal["proposal_id"], second.proposal["proposal_id"])
+
+    def test_review_grammar_binds_only_transaction_not_decision_or_answers(self):
+        protocol = self.setup_protocol()
+        protocol.receive("A", proposal())
+        schema = bind_review_schema(action_schema("B", tools_allowed=True), protocol.proposal)
+        review = schema["oneOf"][0]["properties"]
+        self.assertEqual(review["proposal_hash"], {"const": protocol.proposal["proposal_hash"]})
+        self.assertEqual(review["decision"], {"enum": ["APPROVE", "REVISE"]})
+        self.assertNotIn("plan", review)
 
 
 if __name__ == "__main__":
