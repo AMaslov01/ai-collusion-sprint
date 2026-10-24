@@ -13,6 +13,7 @@ import httpx
 from .abe_protocol import Protocol, action_schema, public_task
 from .abe_runner import AdmissionFailure, BranchRunner, ServiceFailure, TaskLimitExceeded
 from .abe_tasks import prepare_group
+from .abe_visibility import permitted_history, handoff_observations, isolation_observations
 from .artifacts import append_event, atomic_json, canonical, fingerprint, read_json
 from .catalog import load_accommodations
 from .cycle_budget import AccountingFailure, BudgetExceeded, ContextOverflow
@@ -176,3 +177,76 @@ def prefix_phase(config, base, budget, work):
         require(groups[number] == reviewed, "Actual task registry differs from source-only preflight")
         prefix_group(groups[number], catalog, config, base, budget, work, induced=number == 5)
     atomic_json(work / "phase-status.json", {"status": "completed_true_two_agent_DEV_prefixes", "groups": [4, 5], "global_budget": budget.state(), "main_started": False})
+
+
+def continue_group(prefix_job, packages, config, base, budget, work, *, group_registry, catalog):
+    """All assigned arms/opportunities, no branch replacement after outcomes."""
+    group_id = group_registry["group_id"]
+    snapshot = read_json(prefix_job / "snapshot.json")
+    require(read_json(prefix_job / "status.json")["status"] == "prefix_collected", "Unfinished prefix")
+    protocol = Protocol(group_id, namespace(config["run_id"], group_id, "prefix"), catalog,
+                        events=deepcopy(snapshot["events"]), commits=deepcopy(snapshot["commits"]))
+    prefix = BranchRunner(protocol, load_prompts(config), config["limits"], None, base=None,
+                          histories=deepcopy(snapshot["histories"]), private_goals=None,
+                          accounting=lambda ids: ledger_accounting(budget, ids))
+    arms = list(config["selection"]["arms"])
+    order = sorted(arms, key=lambda arm: fingerprint([config["run_id"], group_id, 42, arm]))
+    mapping = {arm: namespace(config["run_id"], group_id, "recipient/" + arm) for arm in arms}
+    group_work = work / f"continuations/group-{group_id}"
+    require(not group_work.exists(), "Continuation matrix immutable")
+    group_work.mkdir(parents=True, mode=0o700)
+    assigned = [{"group_id": group_id, "arm": arm, "opaque_branch_id": mapping[arm], "task_id": task["task_id"],
+                 "status": "assigned_not_run"} for arm in order for task in group_registry["tasks"][2:]]
+    atomic_json(group_work / "admin-assigned-matrix.json", {"order": order, "mapping": mapping, "opportunities": assigned})
+    branches, starts = {}, []
+    for arm in order:
+        job = group_work / mapping[arm]
+        job.mkdir(mode=0o700)
+        package = packages.get(arm)
+        if package is None:
+            atomic_json(job / "status.json", {"status": "not_run_missing_assigned_memory", "arm_admin_only": arm})
+            continue
+        runner = prefix.fork(mapping[arm], package["content"], actor_generator(config, base, budget, job, "validation_actors"),
+                             emit=lambda event, path=job / "events.jsonl": append_event(path, event),
+                             persist=lambda task_id, result, path=job: atomic_json(path / "results" / (task_id + ".json"), result))
+        branches[arm] = runner
+        starts.append({"branch_id": mapping[arm], "histories": deepcopy(runner.histories["B"]), "world_state_hash": fingerprint(runner.protocol.commits), "private_goal": None})
+    require(len({fingerprint({key: value for key, value in start.items() if key != "branch_id"}) for start in starts}) <= 1,
+            "Different B/world starts across arms")
+    atomic_json(group_work / "admin-start-states.json", starts)
+    fatal = None
+    try:
+        for arm in order:
+            if arm not in branches:
+                continue
+            runner = branches[arm]
+            for task in group_registry["tasks"][2:]:
+                runner.run_task(task)
+    except Exception:
+        fatal = traceback.format_exc()
+        raise
+    finally:
+        from .abe_evaluation import evaluate_opportunity
+        for item in assigned:
+            arm, task_id = item["arm"], item["task_id"]
+            job = group_work / mapping[arm]
+            result_path = job / "results" / (task_id + ".json")
+            if result_path.exists():
+                item["status"] = read_json(result_path)["status"]
+            else:
+                task = next(task for task in group_registry["tasks"] if task["task_id"] == task_id)
+                runner = branches.get(arm)
+                events = runner.protocol.events if runner is not None else []
+                evaluation = evaluate_opportunity(task, catalog, events, ledger_complete=True)
+                item["status"] = "not_run_phase_failure" if fatal else "not_run_missing_assigned_memory"
+                atomic_json(result_path, {"task_id": task_id, "status": item["status"], "reason": fatal, "evaluation": evaluation, "model_calls": 0})
+        for arm, runner in branches.items():
+            job = group_work / mapping[arm]
+            atomic_json(job / "actual-requests.json", runner.requests)
+            atomic_json(job / "snapshot.json", {"histories": runner.histories, "commits": runner.protocol.commits, "events": runner.protocol.events})
+            own_events = [{"event_id": event["event_id"], "branch_id": event["branch_id"]} for event in runner.protocol.events]
+            isolation = isolation_observations(mapping[arm], [], own_events)
+            require(isolation["isolated"], "Cross-branch event entered recipient")
+        atomic_json(group_work / "status.json", {"status": "complete" if fatal is None else "stopped_with_assigned_not_run",
+                    "opportunities": assigned, "failure": fatal, "main_started": False})
+    return group_work

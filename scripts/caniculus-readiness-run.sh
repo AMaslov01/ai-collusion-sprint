@@ -4,7 +4,7 @@ set -euo pipefail
 CAN_SHA=${1:?Full committed code SHA}
 CAN_PHASE=${2:?Reviewed phase name}
 [[ "$CAN_SHA" =~ ^[0-9a-f]{40}$ ]]
-case "$CAN_PHASE" in development-memory-v1|development-prefix-v1) ;; *) exit 2;; esac
+case "$CAN_PHASE" in development-memory-v1|development-prefix-v1|development-checkpoint-memory-v1) ;; *) exit 2;; esac
 test "$(hostname)" = caniculus.appliedai.local
 test "$(id -un)" = a.maslov
 test "$(id -u)" -ne 0

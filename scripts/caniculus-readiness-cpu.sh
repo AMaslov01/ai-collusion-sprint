@@ -3,7 +3,7 @@
 set -euo pipefail
 CAN_SHA=${1:?Full committed code SHA}
 CAN_PHASE=${2:-development-memory-v1}
-case "$CAN_PHASE" in development-memory-v1|development-prefix-v1) ;; *) exit 2;; esac
+case "$CAN_PHASE" in development-memory-v1|development-prefix-v1|development-checkpoint-memory-v1) ;; *) exit 2;; esac
 [[ "$CAN_SHA" =~ ^[0-9a-f]{40}$ ]]
 test "$(hostname)" = caniculus.appliedai.local
 test "$(id -un)" = a.maslov
@@ -45,6 +45,7 @@ docker run -d --name "$CAN_NAME" --label owner=a.maslov --label scope=readiness-
  --env "CYCLE_PHASE=$CAN_PHASE" \
  --mount "type=bind,src=$CAN_CODE,dst=/code,readonly" --mount "type=bind,src=$CAN_BASE,dst=/basecode,readonly" \
  --mount "type=bind,src=$CAN_PROJECT/runs/repair-cycle-v3-20261024,dst=/previous,readonly" \
+ --mount "type=bind,src=$CAN_ROOT,dst=/cycle,readonly" \
  --mount "type=bind,src=$CAN_PROJECT/runs/memory-group1-cp2-format-v2,dst=/old,readonly" \
  --mount "type=bind,src=$CAN_PROJECT/inputs/MemoryArena,dst=$CAN_UPSTREAM,readonly" \
  --mount "type=bind,src=$CAN_PROJECT/inputs/travel-database,dst=/database,readonly" \
