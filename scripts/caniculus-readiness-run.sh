@@ -4,7 +4,7 @@ set -euo pipefail
 CAN_SHA=${1:?Full committed code SHA}
 CAN_PHASE=${2:?Reviewed phase name}
 [[ "$CAN_SHA" =~ ^[0-9a-f]{40}$ ]]
-case "$CAN_PHASE" in development-memory-v1) ;; *) exit 2;; esac
+case "$CAN_PHASE" in development-memory-v1|development-prefix-v1) ;; *) exit 2;; esac
 test "$(hostname)" = caniculus.appliedai.local
 test "$(id -un)" = a.maslov
 test "$(id -u)" -ne 0
@@ -13,13 +13,15 @@ CAN_PROJECT=/mnt/ssd/a.maslov/ai-collusion-sprint
 CAN_CODE="$CAN_PROJECT/code/$CAN_SHA"
 CAN_ROOT="$CAN_PROJECT/runs/readiness-cycle-v4-20261024"
 CAN_PREFLIGHT="$CAN_ROOT/cpu-$CAN_SHA"
+if [ "$CAN_PHASE" != development-memory-v1 ]; then CAN_PREFLIGHT="$CAN_ROOT/cpu-$CAN_PHASE-$CAN_SHA"; fi
 CAN_REVIEW="$CAN_PROJECT/inputs/readiness-v4-review-$CAN_SHA"
 CAN_MODEL="$CAN_PROJECT/inputs/Qwen3.8-27B-FP8/017b9c7af6b5689d5dd426a76e0bc077eb5ca20a"
 CAN_IDENTITIES="$CAN_PROJECT/bootstrap/preparation-31f9c028bd8615c4b7648144c278ed0d6ffbe56c"
 CAN_VENDOR="$CAN_PROJECT/dependencies/travel-tools-d0bc2174eea3b3737f6922b89897db4f21ea6f835f7354ee702edbbc9880b3bc"
+CAN_TASKS="$CAN_PROJECT/bootstrap/preparation-33d29710c408fd9851e9de0db5e436cc623b595c/task-data"
 CAN_UPSTREAM=/opt/ai-collusion/sources/MemoryArena
 CAN_UUID=GPU-441e6008-cd27-34b5-c81a-17dad9d4a894
-for CAN_PATH in "$CAN_PROJECT" "$CAN_CODE" "$CAN_ROOT" "$CAN_PREFLIGHT" "$CAN_REVIEW" "$CAN_MODEL" "$CAN_IDENTITIES" "$CAN_VENDOR" "$CAN_PROJECT/cache" "$CAN_PROJECT/inputs/MemoryArena" "$CAN_PROJECT/inputs/travel-database" "$CAN_PROJECT/runs/repair-cycle-v3-20261024"; do
+for CAN_PATH in "$CAN_PROJECT" "$CAN_CODE" "$CAN_ROOT" "$CAN_PREFLIGHT" "$CAN_REVIEW" "$CAN_MODEL" "$CAN_IDENTITIES" "$CAN_VENDOR" "$CAN_TASKS" "$CAN_PROJECT/cache" "$CAN_PROJECT/inputs/MemoryArena" "$CAN_PROJECT/inputs/travel-database" "$CAN_PROJECT/runs/repair-cycle-v3-20261024"; do
  test "$(realpath "$CAN_PATH")" = "$CAN_PATH"
  test "$(stat -c %u "$CAN_PATH")" = "$(id -u)"
 done
@@ -82,6 +84,7 @@ docker run -d --name "$CAN_NAME" --label owner=a.maslov --label scope=readiness-
  --mount "type=bind,src=$CAN_IDENTITIES,dst=/identities,readonly" --mount "type=bind,src=$CAN_PREFLIGHT,dst=/preflight,readonly" --mount "type=bind,src=$CAN_REVIEW,dst=/review,readonly" \
  --mount "type=bind,src=$CAN_PROJECT/inputs/MemoryArena,dst=$CAN_UPSTREAM,readonly" --mount "type=bind,src=$CAN_PROJECT/inputs/travel-database,dst=/database,readonly" \
  --mount "type=bind,src=$CAN_VENDOR,dst=/vendor,readonly" --mount "type=bind,src=$CAN_PROJECT/runs/repair-cycle-v3-20261024,dst=/previous,readonly" \
+ --mount "type=bind,src=$CAN_TASKS,dst=/tasks,readonly" \
  --mount "type=bind,src=$CAN_ROOT,dst=/cycle" --mount "type=bind,src=$CAN_WORK,dst=/work" --mount "type=bind,src=$CAN_PROJECT/cache,dst=/cache" \
  --mount "type=bind,src=$CAN_PROJECT/bootstrap/control,dst=/control,readonly" --entrypoint /usr/bin/timeout "$(cat "$CAN_PROJECT/bootstrap/environment/image-id.txt")" \
  --signal=TERM --kill-after="${CAN_GRACE}s" "${CAN_REMAINING}s" /bin/bash -c 'umask 077; exec python3 -m collusion_handoff.readiness_cycle > /work/supervisor.log 2>&1'

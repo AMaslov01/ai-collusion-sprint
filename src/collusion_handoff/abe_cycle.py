@@ -40,6 +40,10 @@ def actor_generator(config, base, budget, job, allocation):
     from .readiness_cycle import content
     def generate(role, messages, schema, logical_id, deadline, remaining):
         body = constrained_payload("qwen-native-dev", base["generation"], messages, schema, config["limits"]["actor_max_output_tokens"])
+        probe_file = Path("/preflight/actor-wire-probes.json")
+        if "/A/cycle-1/call-1" in logical_id and budget.state()["attempts"] == 0 and probe_file.exists():
+            matches = [value for value in read_json(probe_file).values() if value["request"] == body]
+            require(len(matches) == 1, "Actual first actor request differs from reviewed full wire")
         try:
             count = budget.preview(body, deadline=deadline)
             if count + body["max_tokens"] > remaining:

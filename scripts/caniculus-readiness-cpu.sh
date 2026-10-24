@@ -2,6 +2,8 @@
 # Read-only, CPU-only tests/probes. This command cannot start a model service.
 set -euo pipefail
 CAN_SHA=${1:?Full committed code SHA}
+CAN_PHASE=${2:-development-memory-v1}
+case "$CAN_PHASE" in development-memory-v1|development-prefix-v1) ;; *) exit 2;; esac
 [[ "$CAN_SHA" =~ ^[0-9a-f]{40}$ ]]
 test "$(hostname)" = caniculus.appliedai.local
 test "$(id -un)" = a.maslov
@@ -24,6 +26,7 @@ mkdir -p "$CAN_ROOT"
 test "$(realpath "$CAN_ROOT")" = "$CAN_ROOT"
 test "$(stat -c %u "$CAN_ROOT")" = "$(id -u)"
 CAN_WORK="$CAN_ROOT/cpu-$CAN_SHA"
+if [ "$CAN_PHASE" != development-memory-v1 ]; then CAN_WORK="$CAN_ROOT/cpu-$CAN_PHASE-$CAN_SHA"; fi
 test ! -e "$CAN_WORK"
 test ! -e "$CAN_PROJECT/bootstrap/control/STOP"
 test "$(sha256sum "$CAN_FIXTURES/independent-fixtures.json" | cut -d ' ' -f1)" = a56492c265be060c40e6ddcce6f16add13601c12408746748219d712de384e67
@@ -32,14 +35,14 @@ test "$CAN_REMAINING" -gt 0
 if [ "$CAN_REMAINING" -gt 900 ]; then CAN_REMAINING=900; fi
 mkdir -p "$CAN_WORK/home" "$CAN_WORK/tmp"
 jq '.groups[] | select(.upstream_id >= 4 and .upstream_id <= 7)' "$CAN_TASKS/registry.json" > "$CAN_WORK/reserved-registry.jsonl"
-CAN_NAME="a-maslov-ai-collusion-v4-cpu-${CAN_SHA:0:7}"
+CAN_NAME="a-maslov-ai-collusion-v4-cpu-$CAN_PHASE-${CAN_SHA:0:7}"
 docker run -d --name "$CAN_NAME" --label owner=a.maslov --label scope=readiness-cycle-v4 --label computation=cpu --label "adapter_commit=$CAN_SHA" \
  --user "$(id -u):$(id -g)" --restart=no --network=none --cpus 8 --memory 64g --pids-limit 1024 --shm-size 8g \
  --cap-drop=ALL --security-opt=no-new-privileges --env NVIDIA_VISIBLE_DEVICES=void --env CUDA_VISIBLE_DEVICES= \
  --env HOME=/work/home --env TMPDIR=/work/tmp --env PYTHONDONTWRITEBYTECODE=1 \
  --env HF_HOME=/cache/hf --env HF_HUB_OFFLINE=1 --env TRANSFORMERS_OFFLINE=1 --env XDG_CACHE_HOME=/cache/xdg \
  --env "PYTHONPATH=/vendor:/code/src:$CAN_UPSTREAM" --env MEMORYARENA_ROOT="$CAN_UPSTREAM" --env "ADAPTER_COMMIT=$CAN_SHA" \
- --env CYCLE_PHASE=development-memory-v1 \
+ --env "CYCLE_PHASE=$CAN_PHASE" \
  --mount "type=bind,src=$CAN_CODE,dst=/code,readonly" --mount "type=bind,src=$CAN_BASE,dst=/basecode,readonly" \
  --mount "type=bind,src=$CAN_PROJECT/runs/repair-cycle-v3-20261024,dst=/previous,readonly" \
  --mount "type=bind,src=$CAN_PROJECT/runs/memory-group1-cp2-format-v2,dst=/old,readonly" \
