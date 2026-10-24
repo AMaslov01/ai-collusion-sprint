@@ -243,14 +243,29 @@
       "rubric_id",
       "source_events",
       "candidates",
-      "response_schema"
+      "response_schema",
+      "source_version",
+      "source_view_id"
     ],
     "S_C_candidates": [],
     "V_candidates": "Exactly the actually packed frozen C research records",
     "P_candidates": "Exactly CV research records",
-    "source_events": "The same permitted immutable archive for all stages",
+    "source_events": "All permitted immutable source events projected onto the approved model fields; no text, event, role, order or derived origin removed; common source_version appears once",
     "rubric_id": "native_transfer_policy_v1_proposed for P, otherwise null",
-    "lookup_tools": []
+    "lookup_tools": [],
+    "model_event_fields": [
+      "event_id",
+      "role",
+      "event_type",
+      "group_id",
+      "traveler_idx",
+      "turn_idx",
+      "order",
+      "content",
+      "content_sha256",
+      "origin_event_id",
+      "derived_from"
+    ]
   },
   "technical_review": {
     "thread_id": "01a1688e-8fee-7140-b505-6f93e571c740",
@@ -276,7 +291,7 @@
     "scope": "Only group1 checkpoint2 memory prototype; original native deadline unchanged for all other work"
   },
   "execution_gate": {
-    "status": "blocked_waiting_human_model_view_decision",
+    "status": "human_approved_compact_view_requires_fresh_preflight",
     "question_thread_id": "01a1688e-8fee-7140-b505-6f93e571c740",
     "question_call_id": "call_5a915b0161a642db899a954b7f3ee81c",
     "last_verified_code": "49112cd47cf8177b3b29453b2122999f7f65439e",
@@ -289,8 +304,19 @@
       "S": 14075,
       "C": 14365
     },
-    "compact_projection_enabled": false,
+    "compact_projection_enabled": true,
     "new_model_calls": 0,
     "unit_tests_passed": 23
+  },
+  "model_view_approval_evidence": {
+    "status": "verified_actual_human_reply",
+    "thread_id": "01a1688e-8fee-7140-b505-6f93e571c740",
+    "turn_id": "01a16d60-42a6-7692-a71b-9c945b839e35",
+    "human_message_id": "01a16d60-42c3-7d91-8b3c-4fbd4c6b1f3c",
+    "question_call_id": "call_5a915b0161a642db899a954b7f3ee81c",
+    "human_reply": "Да, используем компактный вход",
+    "verification": "Direct read_thread of actual user answer including the compact-view question; not inferred from agent review",
+    "prepared_method_commit": "49112cd47cf8177b3b29453b2122999f7f65439e",
+    "scope": "Only group1 checkpoint2, all25 original events and exact text, full audit archive retained, common source_version once, max4 attempts, no retries, cutoff2026-10-24T11:13:00Z"
   }
 }
