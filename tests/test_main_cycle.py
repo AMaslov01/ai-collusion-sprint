@@ -9,13 +9,27 @@ from unittest.mock import patch
 
 from collusion_handoff.abe_runner import ServiceFailure
 from collusion_handoff.artifacts import atomic_json, fingerprint, read_json
-from collusion_handoff.main_cycle import assigned_opportunities, approved_pipeline, continuation_group, file_hash, prepare_candidate_frame, registry_digest, verify_annotations
+from collusion_handoff.main_cycle import assigned_opportunities, approved_pipeline, continuation_group, file_hash, prefix_bundle, prepare_candidate_frame, registry_digest, verify_annotations
 from collusion_handoff.main_manifest import ManifestError
 import test_abe_continuation as synthetic_continuation
 from test_main_manifest import synthetic_packet
 
 
 class MainCycleTests(unittest.TestCase):
+    def test_prefix_seal_detects_B_world_changes_even_when_A_archive_is_unchanged(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            job = root / "prefix/group-9"
+            atomic_json(job / "status.json", {"status": "prefix_collected"})
+            atomic_json(job / "source.json", {"archive": "Fixed A-visible source"})
+            atomic_json(job / "private-registry-bound.json", {"group_id": 9})
+            atomic_json(job / "snapshot.json", {"histories": {"B": ["Original B history"]}, "commits": []})
+            sealed = prefix_bundle(root, [9])
+            source_hash = file_hash(job / "source.json")
+            atomic_json(job / "snapshot.json", {"histories": {"B": ["Changed B history"]}, "commits": [{"altered": True}]})
+            self.assertEqual(file_hash(job / "source.json"), source_hash)
+            self.assertNotEqual(prefix_bundle(root, [9]), sealed)
+
     def test_registry_digest_survives_mixed_width_ID_JSON_roundtrip(self):
         with TemporaryDirectory() as temporary:
             groups = {9: {"group_id": 9}, 10: {"group_id": 10}}
@@ -180,6 +194,9 @@ class MainCycleTests(unittest.TestCase):
                 with patch.dict("os.environ", {"ADAPTER_COMMIT": "b" * 40}):
                     with self.assertRaises(ManifestError):
                         approved_pipeline(review, code)
+                (code / "src/collusion_handoff/unlisted_runtime.py").write_text("# Unreviewed executable file\n")
+                with self.assertRaises(ManifestError):
+                    approved_pipeline(review, code)
 
     def test_candidate_screening_keeps_explicit_frame_order_and_does_not_select_main_N(self):
         with TemporaryDirectory() as temporary:
@@ -198,6 +215,7 @@ class MainCycleTests(unittest.TestCase):
             catalog = {key: {"catalog_item_id": key, "city": "City", "price": price}
                        for key, price in (("safe", "80"), ("unsafe", "120"))}
             configuration = {"schema": "main_candidate_frame_configuration_v1", "code_commit": "a" * 40,
+                "code_file_sha256": {str(path.relative_to(root)): file_hash(path) for path in root.rglob("*") if path.is_file()},
                 "science_freeze_sha256": "c" * 64, "source_sha256": file_hash(source),
                 "eligibility_profile": {"config_path": "candidate-profile.json", "config_sha256": file_hash(root / "candidate-profile.json"),
                                         "task_policy_sha256": fingerprint(profile["task_policy"])},

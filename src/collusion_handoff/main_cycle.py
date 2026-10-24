@@ -29,6 +29,20 @@ def file_hash(path):
     return sha256(Path(path).read_bytes()).hexdigest()
 
 
+def verify_code_inventory(code, expected):
+    """Bind the complete exported checkout, not an asserted directory/env SHA."""
+    code = Path(code)
+    require(code.is_dir() and not (code / ".git").exists(), "Use the complete immutable exported repository snapshot")
+    actual = {}
+    for path in sorted(code.rglob("*")):
+        require(not path.is_symlink() and path.resolve().is_relative_to(code.resolve()), "Code snapshot contains a symlink")
+        require(path.is_file() or path.is_dir(), "Code snapshot contains a non-regular entry")
+        if path.is_file():
+            actual[str(path.relative_to(code))] = file_hash(path)
+    require(actual == expected, "Complete main execution inventory differs from the reviewed snapshot")
+    return fingerprint(actual)
+
+
 def registry_digest(groups):
     """Normalize IDs before hashing, including across a JSON write/read roundtrip."""
     normalized = {}
@@ -39,6 +53,22 @@ def registry_digest(groups):
         require(key not in normalized, "Duplicate normalized registry ID")
         normalized[key] = group
     return fingerprint(normalized)
+
+
+def prefix_bundle(prefixes, group_ids):
+    """Seal complete historical inputs, including B histories and world state."""
+    prefixes = Path(prefixes)
+    files = {}
+    for number in group_ids:
+        job = prefixes / f"prefix/group-{number}"
+        require(read_json(job / "status.json")["status"] == "prefix_collected", "Incomplete historical main prefix")
+        for name in ("snapshot.json", "source.json", "private-registry-bound.json"):
+            require((job / name).is_file(), "Historical main prefix input missing")
+        for path in sorted(job.rglob("*")):
+            require(path.resolve().is_relative_to(prefixes.resolve()), "Historical main prefix escapes its mount")
+            if path.is_file():
+                files[str(path.relative_to(prefixes))] = file_hash(path)
+    return {"schema": "main_historical_prefix_bundle_v1", "file_sha256": files}
 
 
 def assigned_opportunities(manifest, groups):
@@ -60,10 +90,7 @@ def approved_pipeline(review, code):
                                 read_json(review / "main-readiness.json"))
     pipeline = manifest["pipeline"]
     require(os.environ.get("ADAPTER_COMMIT") == pipeline["code_commit"], "Main checkout differs from approval")
-    for name, digest in pipeline["file_sha256"].items():
-        path = code / name
-        require(path.resolve().is_relative_to(code.resolve()) and path.is_file(), "Invalid pinned pipeline file")
-        require(file_hash(path) == digest, "Pinned main file changed: " + name)
+    verify_code_inventory(code, pipeline["file_sha256"])
     config_path = code / pipeline["config_path"]
     require(file_hash(config_path) == pipeline["config_sha256"], "Main pipeline configuration changed")
     config = read_json(config_path)
@@ -144,14 +171,8 @@ def prepare_registry(manifest, config, source_path, catalog):
                                     config["main_data_source"]["sha256"])
 
 
-def prepare_candidate_frame(configuration, *, code, source_path, catalog, actual_commit):
-    """Screen an explicit source frame without choosing main N or collecting prefixes.
-
-    This is a separate, CPU-only preparation interface. Its configuration must be
-    frozen after the scientific design is chosen. Calling it does not authorize
-    any model phase or create a main experiment manifest.
-    """
-    required = {"schema", "code_commit", "science_freeze_sha256", "source_sha256", "eligibility_profile",
+def _candidate_profile(configuration, code, actual_commit):
+    required = {"schema", "code_commit", "code_file_sha256", "science_freeze_sha256", "source_sha256", "eligibility_profile",
                 "ordered_group_ids", "dev_exposure_group_ids", "order_policy", "replacement_policy"}
     require(set(configuration) == required and configuration["schema"] == "main_candidate_frame_configuration_v1",
             "Explicit frozen candidate-frame configuration required")
@@ -166,6 +187,7 @@ def prepare_candidate_frame(configuration, *, code, source_path, catalog, actual
             and len(exposed) == len(set(exposed)) and not set(ids) & set(exposed), "Candidate frame overlaps DEV exposure")
     require(all(isinstance(configuration[key], str) and SHA.fullmatch(configuration[key]) and configuration[key] != "0" * 64
                 for key in ("science_freeze_sha256", "source_sha256")), "Science and native-source freezes are required")
+    verify_code_inventory(code, configuration["code_file_sha256"])
     spec = configuration["eligibility_profile"]
     require(set(spec) == {"config_path", "config_sha256", "task_policy_sha256"}, "Explicit eligibility profile required")
     name = Path(spec["config_path"])
@@ -176,6 +198,18 @@ def prepare_candidate_frame(configuration, *, code, source_path, catalog, actual
     profile = read_json(path)
     require(profile["scope"] == "candidate_eligibility_profile_v1" and
             fingerprint(profile["task_policy"]) == spec["task_policy_sha256"], "Fixed candidate eligibility rule changed")
+    return profile
+
+
+def prepare_candidate_frame(configuration, *, code, source_path, catalog, actual_commit):
+    """Screen an explicit source frame without choosing main N or collecting prefixes.
+
+    This is a separate, CPU-only preparation interface. Its configuration must be
+    frozen after the scientific design is chosen. Calling it does not authorize
+    any model phase or create a main experiment manifest.
+    """
+    profile = _candidate_profile(configuration, code, actual_commit)
+    ids = configuration["ordered_group_ids"]
     groups, flow = _prepare_selected_groups(ids, profile, source_path, catalog, configuration["source_sha256"])
     return {"schema": "main_candidate_frame_preparation_v1", "configuration_sha256": fingerprint(configuration),
             "code_commit": actual_commit, "science_freeze_sha256": configuration["science_freeze_sha256"],
@@ -359,6 +393,7 @@ def preflight(manifest, config, base, assets, phase, *, code, review, root, work
                                            ("private-task-registry.json", "assigned-future-opportunities.json", "preflight.json")}
     if phase == "continuations":
         receipt["review_files_sha256"]["human-source-annotations.json"] = file_hash(review / "human-source-annotations.json")
+        receipt["historical_prefix_bundle"] = prefix_bundle(root / "prefixes", manifest["sample"]["group_ids"])
     atomic_json(work / "preflight.json", receipt)
 
 
@@ -439,11 +474,7 @@ def main():
                 {path.name for path in Path("/sys/class/net").iterdir()} == {"lo"}, "Candidate screening requires CPU-only Docker with network=none")
         require(not args.frame_output.exists(), "Candidate preparation is immutable; use a separately frozen new frame")
         configuration = read_json(args.candidate_frame)
-        spec = configuration["eligibility_profile"]
-        profile_path = Path("/code") / spec["config_path"]
-        require(profile_path.resolve().is_relative_to(Path("/code")) and
-                file_hash(profile_path) == spec["config_sha256"], "Unpinned candidate eligibility profile")
-        profile = read_json(profile_path)
+        profile = _candidate_profile(configuration, Path("/code"), os.environ["ADAPTER_COMMIT"])
         from .catalog import load_accommodations
         catalog = load_accommodations("/database/accommodations/clean_accommodations_2022.csv", profile["task_policy"]["catalog_csv_sha256"])
         result = prepare_candidate_frame(configuration, code=Path("/code"), source_path=args.frame_source,
@@ -476,6 +507,8 @@ def main():
     else:
         atomic_json(master, manifest)
     if phase == "continuations":
+        require(prefix_bundle(root / "prefixes", manifest["sample"]["group_ids"]) == pre["historical_prefix_bundle"],
+                "Historical B/world/source inputs changed after main CPU review")
         groups = {number: read_json(root / f"prefixes/prefix/group-{number}/private-registry-bound.json") for number in manifest["sample"]["group_ids"]}
         verify_annotations(review, manifest, groups, root / "prefixes")
     if args.client:

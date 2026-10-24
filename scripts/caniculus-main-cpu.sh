@@ -83,6 +83,20 @@ if [ "$CAN_MODE" = gpu ]; then
  test -z "$(ss -H -lnt 'sport = :18083')"
  CAN_USED=0
  mkdir -p "$CAN_ROOT/resource-inspects"
+ for CAN_PRIOR_INTENT in "$CAN_ROOT"/launch-intent-*.json; do
+  test -f "$CAN_PRIOR_INTENT" || continue
+  test "$(jq -r .run_id "$CAN_PRIOR_INTENT")" = "$CAN_RUN"
+  CAN_INTENDED=$(jq -r .container_name "$CAN_PRIOR_INTENT")
+  if ! grep -Fxq "$CAN_INTENDED" "$CAN_ROOT/gpu-phase-names.txt" 2>/dev/null; then
+   printf '%s\n' "$CAN_INTENDED" >> "$CAN_ROOT/gpu-phase-names.txt"
+  fi
+ done
+ # Recover any own container created/started before a launcher interruption.
+ while read -r CAN_DISCOVERED; do
+  if ! grep -Fxq "$CAN_DISCOVERED" "$CAN_ROOT/gpu-phase-names.txt" 2>/dev/null; then
+   printf '%s\n' "$CAN_DISCOVERED" >> "$CAN_ROOT/gpu-phase-names.txt"
+  fi
+ done < <(docker ps -a --filter label=owner=a.maslov --filter "label=main_run=$CAN_RUN" --filter label=computation=gpu --format '{{.Names}}')
  if [ -f "$CAN_ROOT/gpu-phase-names.txt" ]; then
   while read -r CAN_PREVIOUS; do
    test "$(docker inspect -f '{{index .Config.Labels "owner"}}' "$CAN_PREVIOUS")" = a.maslov
@@ -90,6 +104,10 @@ if [ "$CAN_MODE" = gpu ]; then
    test "$(docker inspect -f '{{.State.Running}}' "$CAN_PREVIOUS")" = false
    CAN_INSPECT="$CAN_ROOT/resource-inspects/$CAN_PREVIOUS.json"
    docker inspect "$CAN_PREVIOUS" > "$CAN_INSPECT"
+   if [ "$(jq -r '.[0].State.Status' "$CAN_INSPECT")" = created ]; then
+    test "$(jq -r '.[0].State.StartedAt' "$CAN_INSPECT")" = 0001-01-01T00:00:00Z
+    continue
+   fi
    CAN_NS=$(($(date -d "$(jq -r '.[0].State.FinishedAt' "$CAN_INSPECT")" +%s%N)-$(date -d "$(jq -r '.[0].State.StartedAt' "$CAN_INSPECT")" +%s%N)))
    CAN_USED=$((CAN_USED+(CAN_NS+999999999)/1000000000))
   done < "$CAN_ROOT/gpu-phase-names.txt"
@@ -123,8 +141,15 @@ test ! -e "$CAN_WORK"
 mkdir -p "$CAN_WORK/home" "$CAN_WORK/tmp"
 sha256sum "$0" > "$CAN_WORK/launcher.sha256"
 CAN_NETWORK=none
-if [ "$CAN_MODE" = gpu ]; then CAN_NETWORK=host; fi
-docker run -d --name "$CAN_NAME" --label owner=a.maslov --label "main_run=$CAN_RUN" --label "computation=$CAN_MODE" --label "adapter_commit=$CAN_SHA" \
+if [ "$CAN_MODE" = gpu ]; then
+ CAN_NETWORK=host
+ CAN_INTENT="$CAN_ROOT/launch-intent-$CAN_PHASE.json"
+ test ! -e "$CAN_INTENT"
+ jq -n --arg name "$CAN_NAME" --arg run "$CAN_RUN" --arg code "$CAN_SHA" --argjson deadline "$CAN_END" \
+  '{schema:"main_gpu_launch_intent_v1",container_name:$name,run_id:$run,code_commit:$code,admission_deadline_unix:$deadline}' > "$CAN_INTENT"
+ sync -d "$CAN_INTENT"
+fi
+CAN_CONTAINER_ID=$(docker create --name "$CAN_NAME" --label owner=a.maslov --label "main_run=$CAN_RUN" --label "computation=$CAN_MODE" --label "adapter_commit=$CAN_SHA" \
  --user "$(id -u):$(id -g)" --restart=no --network="$CAN_NETWORK" --cpus "$CAN_CPU" --memory "${CAN_RAM}g" --pids-limit "$CAN_PIDS" --shm-size "${CAN_SHM}g" \
  --cap-drop=ALL --security-opt=no-new-privileges "${CAN_EXTRA[@]}" \
  --env "ADAPTER_COMMIT=$CAN_SHA" --env "MAIN_PHASE=$CAN_PHASE" --env "CYCLE_PHASE=$CAN_PHASE" --env "PACKAGE_DEADLINE_UNIX=$CAN_END" \
@@ -139,6 +164,11 @@ docker run -d --name "$CAN_NAME" --label owner=a.maslov --label "main_run=$CAN_R
  --mount "type=bind,src=$CAN_PROJECT/inputs/MemoryArena,dst=$CAN_UPSTREAM,readonly" --mount "type=bind,src=$CAN_PROJECT/inputs/travel-database,dst=/database,readonly" \
  --mount "type=bind,src=$CAN_ROOT,dst=/cycle$CAN_MOUNT_SUFFIX" --mount "type=bind,src=$CAN_WORK,dst=/work" \
  --mount "type=bind,src=$CAN_PROJECT/cache,dst=/cache" --mount "type=bind,src=$CAN_PROJECT/bootstrap/control,dst=/control,readonly" \
- --workdir "$CAN_UPSTREAM" --entrypoint /usr/bin/timeout "$CAN_IMAGE" --signal=TERM --kill-after=30s "${CAN_SECONDS}s" /bin/bash -c "$CAN_COMMAND"
-if [ "$CAN_MODE" = gpu ]; then printf '%s\n' "$CAN_NAME" >> "$CAN_ROOT/gpu-phase-names.txt"; fi
+ --workdir "$CAN_UPSTREAM" --entrypoint /usr/bin/timeout "$CAN_IMAGE" --signal=TERM --kill-after=30s "${CAN_SECONDS}s" /bin/bash -c "$CAN_COMMAND")
+if [ "$CAN_MODE" = gpu ]; then
+ printf '%s\n' "$CAN_NAME" >> "$CAN_ROOT/gpu-phase-names.txt"
+ printf '%s\n' "$CAN_CONTAINER_ID" > "$CAN_WORK/created-container-id.txt"
+ sync -d "$CAN_ROOT/gpu-phase-names.txt" "$CAN_WORK/created-container-id.txt"
+fi
+docker start "$CAN_CONTAINER_ID"
 docker inspect "$CAN_NAME" > "$CAN_WORK/docker-inspect.json"
