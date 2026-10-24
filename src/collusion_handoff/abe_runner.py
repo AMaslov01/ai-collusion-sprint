@@ -17,6 +17,15 @@ from .memory import MemoryError, require, strict_json
 
 class ServiceFailure(RuntimeError):
     """Stop the phase on a model-service/transport failure; never retry."""
+    def __init__(self, message, *, kind="model_service_failure"):
+        super().__init__(message)
+        self.kind = kind
+
+
+class AdmissionFailure(RuntimeError):
+    def __init__(self, message, *, kind, stop_phase=False):
+        super().__init__(message)
+        self.kind, self.stop_phase = kind, stop_phase
 
 
 class TaskLimitExceeded(MemoryError):
@@ -24,9 +33,10 @@ class TaskLimitExceeded(MemoryError):
 
 
 class BranchRunner:
-    def __init__(self, protocol, prompts, limits, generate, *, base, histories=None, archive="", private_goals=None, persist=None):
+    def __init__(self, protocol, prompts, limits, generate, *, base, histories=None, archive="", private_goals=None, persist=None, accounting=None):
         self.protocol, self.prompts, self.limits = protocol, prompts, limits
         self.generate, self.persist = generate, persist
+        self.accounting = accounting
         self.histories = deepcopy(histories) if histories is not None else {"A": [], "B": []}
         self.archive, self.private_goals = archive, private_goals or {}
         self.receipts = {role: set() for role in ("A", "B")}
@@ -71,17 +81,22 @@ class BranchRunner:
         deadline = time.time() + self.limits["task_wall_seconds"]
         first_proposal = None
         failure = None
+        fatal = None
+        logical_ids = []
         try:
             while self.protocol.terminal is None:
                 role = self.protocol.expected_role
                 allowance = self.limits[f"{role}_tool_requests_per_cycle"]
                 used = 0
                 while True:
-                    if calls >= self.limits["task_max_calls"] or time.time() >= deadline:
-                        raise TaskLimitExceeded("Task call or wall-time budget exhausted")
+                    if calls >= self.limits["task_max_calls"]:
+                        raise TaskLimitExceeded("Task model-call budget exhausted")
+                    if time.time() >= deadline:
+                        raise AdmissionFailure("Task wall-time exhausted", kind="timeout")
                     schema = action_schema(role, tools_allowed=used < allowance)
                     messages = self.messages(role, schema)
                     logical_id = f"{self.protocol.branch_id}/{task['task_id']}/{role}/cycle-{self.protocol.cycle}/call-{calls+1}"
+                    logical_ids.append(logical_id)
                     self.protocol.event("actor_request", role, {"logical_call_id": logical_id, "messages_sha256": fingerprint(messages),
                                         "schema_sha256": fingerprint(schema), "initial_A_prime_candidate": role == "A" and first_proposal is None})
                     self.requests.append({"role": role, "task_id": task["task_id"], "payload": {"messages": deepcopy(messages)}})
@@ -97,7 +112,10 @@ class BranchRunner:
                     self.add(role, "assistant", "assistant_action", completion["text"], role)
                     if action["type"] == "tool_request":
                         require(tools < self.limits["task_max_tool_receipts"], "Task tool receipt limit exceeded")
-                        result = execute_tool(self.protocol, action["tool"], action["arguments"], page_size=self.limits["catalog_page_size"])
+                        try:
+                            result = execute_tool(self.protocol, action["tool"], action["arguments"], page_size=self.limits["catalog_page_size"])
+                        except Exception as error:
+                            raise AdmissionFailure(str(error), kind="tool_error") from error
                         event = self.protocol.event("tool_completed", role, {"tool": action["tool"], "arguments": action["arguments"], "result": result})
                         receipt = event["event_id"] + "/receipt"
                         self.add(role, "user", "tool_result", canonical({"receipt_id": receipt, "tool": action["tool"], "result": result}).decode(), "tool", receipt_id=receipt)
@@ -116,21 +134,28 @@ class BranchRunner:
                             for recipient in ("A", "B"):
                                 self.add(recipient, "user", "commit_receipt", canonical({"runner_commit": result}).decode(), "runner")
                     break
-        except ServiceFailure:
+        except (ServiceFailure, AdmissionFailure) as error:
+            failure = {"type": type(error).__name__, "kind": error.kind, "message": str(error)}
             if self.protocol.terminal is None:
-                self.protocol.finish("process_failure")
-            raise
+                self.protocol.finish(error.kind)
+            if isinstance(error, ServiceFailure) or error.stop_phase:
+                fatal = error
         except (MemoryError, ValidationError, json.JSONDecodeError, ValueError) as error:
             failure = {"type": type(error).__name__, "message": str(error)}
             if self.protocol.terminal is None:
                 self.protocol.finish("budget_exhausted" if isinstance(error, TaskLimitExceeded) else "protocol_invalid")
         evaluation = evaluate_opportunity(task, self.protocol.catalog, self.protocol.events, ledger_complete=True)
-        result = {"task_id": task["task_id"], "status": self.protocol.terminal, "model_calls": calls,
-                  "input_output_tokens": tokens, "tool_receipts": tools, "failure": failure,
+        spend = self.accounting(logical_ids) if self.accounting else {"attempts": calls, "accounted_input_output_tokens": tokens, "unknown_spend_requests": []}
+        result = {"task_id": task["task_id"], "status": self.protocol.terminal, "model_calls": spend["attempts"],
+                  "input_output_tokens": spend["accounted_input_output_tokens"], "unknown_spend_requests": spend["unknown_spend_requests"],
+                  "tool_receipts": tools, "failure": failure,
                   "initial_proposal": first_proposal, "evaluation": evaluation,
                   "world_state_hash": fingerprint(self.protocol.commits)}
         if self.persist:
             self.persist(task["task_id"], result)
+        self.last_result = result
+        if fatal is not None:
+            raise fatal
         return result
 
     def source(self, versions):
@@ -153,4 +178,4 @@ class BranchRunner:
         a_base = [record for record in permitted_history(self.histories["A"]) if record["event_type"] in {"base_query", "provided_base_plan"}]
         return BranchRunner(protocol, self.prompts, self.limits, generate, base=None,
                             histories={"A": a_base, "B": b_history}, archive=archive,
-                            private_goals=None, persist=persist)
+                            private_goals=None, persist=persist, accounting=self.accounting)

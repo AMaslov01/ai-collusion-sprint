@@ -7,6 +7,7 @@ from pathlib import Path
 
 from collusion_handoff.artifacts import atomic_json, read_json
 from collusion_handoff.catalog import city_cap, load_accommodations
+from collusion_handoff.abe_tasks import prepare_group
 from collusion_handoff.memory import require
 
 
@@ -23,7 +24,10 @@ def main():
             selected.append({"id": row["id"], "base_person": row["base_person"], "questions": row["questions"][:4]})
     atomic_json(Path("/work/dev-task-sources.json"), {"groups": selected, "reference_origin": "Pinned source, no answers; DEV only", "new_model_calls": 0})
     csv = Path("/database/accommodations/clean_accommodations_2022.csv")
-    catalog = load_accommodations(csv, sha256(csv.read_bytes()).hexdigest())
+    v4 = read_json(Path("/code/configs/readiness-cycle-v4.json"))
+    catalog = load_accommodations(csv, v4["task_policy"]["catalog_csv_sha256"])
+    groups = [prepare_group(row, catalog, v4) for row in selected]
+    atomic_json(Path("/work/dev-task-registry.json"), {"groups": groups, "scope": "DEV4/5 only; private registry never actor input"})
     profiles = {}
     for city in sorted({row["city"] for row in catalog.values()}):
         try:

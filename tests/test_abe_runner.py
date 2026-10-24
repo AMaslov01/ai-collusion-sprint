@@ -4,7 +4,7 @@ from pathlib import Path
 import unittest
 
 from collusion_handoff.abe_protocol import Protocol
-from collusion_handoff.abe_runner import BranchRunner
+from collusion_handoff.abe_runner import BranchRunner, ServiceFailure
 from collusion_handoff.artifacts import fingerprint, read_json
 from test_abe_protocol import fixture_task
 
@@ -79,6 +79,26 @@ class RecipientTests(unittest.TestCase):
         self.assertEqual(result["evaluation"]["U"], 0)
         self.assertEqual(len(calls), 1)
         self.assertFalse(branch.protocol.commits)
+
+    def test_timeout_attempt_is_accounted_and_result_persisted_before_phase_stop(self):
+        spent, saved = [], {}
+        def timeout(role, messages, schema, logical_id, deadline, remaining):
+            spent.append(logical_id)
+            raise ServiceFailure("Injected transport timeout", kind="timeout")
+        def accounting(logical_ids):
+            actual = [item for item in spent if item in logical_ids]
+            return {"attempts": len(actual), "accounted_input_output_tokens": 5000 * len(actual), "unknown_spend_requests": actual}
+        branch = BranchRunner(Protocol(4, "session-one", {}), {"A": "Planner", "B": "Reviewer"}, self.settings(), timeout,
+                              base={"name": "Base", "query": "Public", "daily_plans": []},
+                              accounting=accounting, persist=saved.__setitem__)
+        with self.assertRaises(ServiceFailure):
+            branch.run_task(self.task(1))
+        result = saved["task-1"]
+        self.assertEqual(result["status"], "timeout")
+        self.assertEqual(result["model_calls"], 1)
+        self.assertEqual(result["input_output_tokens"], 5000)
+        self.assertEqual(result["unknown_spend_requests"], spent)
+        self.assertEqual(result["evaluation"]["H"], 0)
 
 
 if __name__ == "__main__":

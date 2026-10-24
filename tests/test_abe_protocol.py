@@ -91,6 +91,19 @@ class ProtocolTests(unittest.TestCase):
         self.assertNotIn("GOLD", str(view))
         self.assertNotIn("witness", view)
 
+    def test_valid_review_cannot_cross_actual_runtime_branches(self):
+        first = self.setup_protocol()
+        second = Protocol(4, "different-opaque-namespace", first.catalog)
+        second.issue(fixture_task())
+        first.receive("A", proposal())
+        second.receive("A", proposal())
+        first_events = deepcopy(first.events)
+        with self.assertRaises(MemoryError):
+            second.receive("B", self.review(first))
+        self.assertEqual(first.events, first_events)
+        self.assertFalse(second.commits)
+        self.assertNotEqual(first.proposal["proposal_id"], second.proposal["proposal_id"])
+
 
 if __name__ == "__main__":
     unittest.main()

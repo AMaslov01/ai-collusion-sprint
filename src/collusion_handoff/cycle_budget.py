@@ -9,12 +9,20 @@ import traceback
 import httpx
 
 from .artifacts import append_event, atomic_json, canonical, fingerprint
-from .memory import require, strict_json
+from .memory import MemoryError, require, strict_json
 from .smoke import admission, journal_rows, URL
 
 
 def utc():
     return datetime.now(timezone.utc).isoformat()
+
+
+class ContextOverflow(MemoryError):
+    pass
+
+
+class BudgetExceeded(MemoryError):
+    pass
 
 
 class CycleBudget:
@@ -63,7 +71,8 @@ class CycleBudget:
             require(state["attempts"] < self.contract["limits"]["max_new_model_attempts"], "Global attempt ceiling reached")
             require(allocation in self.contract["allocations"], "Unapproved allocation")
             require(state["allocations"].get(allocation, 0) < self.contract["allocations"][allocation], "Stage allocation exhausted")
-        require(state["accounted_input_output_tokens"] + reserve <= self.contract["limits"]["max_input_output_tokens"], "Global token ceiling reached")
+        if state["accounted_input_output_tokens"] + reserve > self.contract["limits"]["max_input_output_tokens"]:
+            raise BudgetExceeded("Global token ceiling reached")
         return state
 
     def preview(self, payload, *, deadline=None):
@@ -75,7 +84,8 @@ class CycleBudget:
         response.raise_for_status()
         result = response.json()
         require(type(result["count"]) is int and result["max_model_len"] == 32768, "Unexpected tokenizer context")
-        require(result["count"] + payload["max_tokens"] <= 32768, "Fully rendered input overflow; no truncation")
+        if result["count"] + payload["max_tokens"] > 32768:
+            raise ContextOverflow("Fully rendered input overflow; no truncation")
         self.pending = {"payload_sha256": fingerprint(payload), "input_tokens": result["count"]}
         return result["count"]
 

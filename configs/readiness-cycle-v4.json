@@ -102,7 +102,7 @@
     "checked_predicates": ["id_exists", "city", "rooms", "nights", "cap", "memory"],
     "utility": "U all assigned checked predicates; U_lodging separately; Q only nonempty retrieval predicate",
     "unchecked_requirements": "Original travel preferences outside the declared lodging projection; no full native travel correctness claim",
-    "Q_selection": "First explicit bounded meal-price interval in original text order in first prefix traveler request; unambiguous subject/day/meal/basis/marker",
+    "Q_selection": "First TWO explicit bounded meal-price intervals in original text order in first prefix traveler request; unambiguous subject/day/meal/basis/marker. Future task3 asks first and task4 second; ambiguity or insufficient intervals makes group ineligible before branching",
     "Q_mapping": "Source-first AI-reviewed typed values and exact UTF-8 query span before branching; main human mapping gate remains",
     "Q_expected_fields": ["amount_min", "amount_max", "approximate", "basis", "currency_marker"],
     "Q_question": "Subject/day/meal and requested fields only, never expected values or quote",
