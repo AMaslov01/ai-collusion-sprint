@@ -27,7 +27,7 @@ if [ -d "$CAN_FRESH" ]; then
  CAN_EXTRA_MOUNTS+=(--mount "type=bind,src=$CAN_FRESH,dst=/fresh-fixtures,readonly")
 fi
 if [[ "$CAN_PHASE" == validation-* ]]; then
- CAN_REVIEW="$CAN_PROJECT/inputs/readiness-v5-review-$CAN_SHA"
+ CAN_REVIEW="$CAN_PROJECT/inputs/readiness-v5-review-$CAN_SHA-$CAN_PHASE"
  test -f "$CAN_REVIEW/final-DEV-validation-freeze.json"
  test -d "$CAN_FRESH"
 fi
@@ -49,6 +49,7 @@ CAN_REMAINING=$(($(date -u -d 2026-10-25T12:00:00Z +%s)-$(date +%s)))
 test "$CAN_REMAINING" -gt 0
 if [ "$CAN_REMAINING" -gt 900 ]; then CAN_REMAINING=900; fi
 mkdir -p "$CAN_WORK/home" "$CAN_WORK/tmp"
+sha256sum "$0" > "$CAN_WORK/cpu-launcher.sha256"
 jq '.groups[] | select(.upstream_id >= 4 and .upstream_id <= 7)' "$CAN_TASKS/registry.json" > "$CAN_WORK/reserved-registry.jsonl"
 CAN_NAME="a-maslov-ai-collusion-v5-cpu-$CAN_PHASE-${CAN_SHA:0:7}"
 docker run -d --name "$CAN_NAME" --label owner=a.maslov --label scope=readiness-cycle-v5 --label computation=cpu --label "adapter_commit=$CAN_SHA" \
@@ -71,6 +72,6 @@ docker run -d --name "$CAN_NAME" --label owner=a.maslov --label scope=readiness-
  --mount "type=bind,src=$CAN_PROJECT/cache,dst=/cache" --mount "type=bind,src=$CAN_PROJECT/bootstrap/control,dst=/control,readonly" \
  --workdir "$CAN_UPSTREAM" --entrypoint /usr/bin/timeout "$(cat "$CAN_PROJECT/bootstrap/environment/image-id.txt")" \
  --signal=TERM --kill-after=30s "${CAN_REMAINING}s" /bin/bash -c \
- 'set -e; umask 077; test ! -e /control/STOP; python3 -m unittest discover -s /code/tests -v > /work/unittest.log 2>&1; python3 /code/scripts/probe-structured-output.py > /work/probe.log 2>&1; python3 /code/scripts/measure-memory-codec.py > /work/codec.log 2>&1; python3 /code/scripts/prepare-abe-dev.py > /work/abe-preparation.log 2>&1; python3 -m collusion_handoff.readiness_cycle --preflight > /work/component-preflight.log 2>&1; python3 /code/scripts/run-abe-independent-fixtures.py --fixtures /review-v4/independent-fixtures.json --output /work/independent --adapter-commit "$ADAPTER_COMMIT" --execution-environment "caniculus non-root CPU Docker immutable vLLM0.32.0 image bd8a5d7a8774800c92d714c0c226b32c1863f929150f36efd610aebcd12a335d" > /work/independent.log 2>&1; if test -d /fresh-fixtures; then python3 /code/scripts/probe-fresh-memory-wire.py > /work/fresh-wire.log 2>&1; fi'
+ 'set -e; umask 077; test ! -e /control/STOP; if [[ "$CYCLE_PHASE" == validation-* ]]; then exec python3 -m collusion_handoff.readiness_cycle --preflight > /work/component-preflight.log 2>&1; fi; python3 -m unittest discover -s /code/tests -v > /work/unittest.log 2>&1; python3 /code/scripts/probe-structured-output.py > /work/probe.log 2>&1; python3 /code/scripts/measure-memory-codec.py > /work/codec.log 2>&1; python3 /code/scripts/prepare-abe-dev.py > /work/abe-preparation.log 2>&1; python3 -m collusion_handoff.readiness_cycle --preflight > /work/component-preflight.log 2>&1; python3 /code/scripts/run-abe-independent-fixtures.py --fixtures /review-v4/independent-fixtures.json --output /work/independent --adapter-commit "$ADAPTER_COMMIT" --execution-environment "caniculus non-root CPU Docker immutable vLLM0.32.0 image bd8a5d7a8774800c92d714c0c226b32c1863f929150f36efd610aebcd12a335d" > /work/independent.log 2>&1; if test -d /fresh-fixtures; then python3 /code/scripts/probe-fresh-memory-wire.py > /work/fresh-wire.log 2>&1; fi'
 docker inspect "$CAN_NAME" > "$CAN_WORK/docker-inspect.json"
 printf '%s\n' "$CAN_WORK"

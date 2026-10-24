@@ -15,6 +15,7 @@ CAN_ROOT="$CAN_PROJECT/runs/readiness-cycle-v5-20261024"
 CAN_PREFLIGHT="$CAN_ROOT/cpu-$CAN_SHA"
 if [ "$CAN_PHASE" != development-memory-v1 ]; then CAN_PREFLIGHT="$CAN_ROOT/cpu-$CAN_PHASE-$CAN_SHA"; fi
 CAN_REVIEW="$CAN_PROJECT/inputs/readiness-v5-review-$CAN_SHA"
+if [[ "$CAN_PHASE" == validation-* ]]; then CAN_REVIEW="$CAN_REVIEW-$CAN_PHASE"; fi
 CAN_MODEL="$CAN_PROJECT/inputs/Qwen3.8-27B-FP8/017b9c7af6b5689d5dd426a76e0bc077eb5ca20a"
 CAN_IDENTITIES="$CAN_PROJECT/bootstrap/preparation-31f9c028bd8615c4b7648144c278ed0d6ffbe56c"
 CAN_VENDOR="$CAN_PROJECT/dependencies/travel-tools-d0bc2174eea3b3737f6922b89897db4f21ea6f835f7354ee702edbbc9880b3bc"
