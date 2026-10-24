@@ -1,4 +1,4 @@
-"""Replay the H100 hardware/A/B prefix phase from immutable response caches.
+"""Replay frozen H100 hardware/development or final-DEV prefix response caches.
 
 Non-root CPU Docker only; no model client or network calls. Load the original
 inference checkout explicitly. Memory and continuation phases need their own
@@ -55,9 +55,14 @@ def main():
         return [strict_json(line) for line in data.decode().splitlines()]
 
     phase = read_json(completed / "phase-manifest.json")
-    require(phase["phase"] == "hardware-and-development-prefix-v1", "Unimplemented replay profile; do not claim a pass")
+    require(phase["phase"] in {"hardware-and-development-prefix-v1", "validation-prefix-v1"},
+            "Unimplemented replay profile; do not claim a pass")
+    development = phase["phase"] == "hardware-and-development-prefix-v1"
     config = read_json(code / "configs/readiness-cycle-v5.json")
     base = read_json(code / config["base_runtime_config"])
+    selected = (config["selection"]["developmental_nominal_groups"] + config["selection"]["developmental_induced_groups"]
+                if development else config["selection"]["independent_validation_induced_groups"])
+    actor_prefixes = tuple(abe_cycle.namespace(config["run_id"], number, "prefix") + "/" for number in selected)
     require(phase["config_sha256"] == sha256((code / "configs/readiness-cycle-v5.json").read_bytes()).hexdigest(), "Inference config changed")
     assets = {stage: {"prompt": (code / spec["prompt"]).read_text(), "schema": read_json(code / spec["schema"])}
               for stage, spec in config["memory"]["stages"].items()}
@@ -92,8 +97,10 @@ def main():
                     and 0 <= usage["completion_tokens"] <= body["max_tokens"]
                     and receipt["accounted_actual_tokens"] == usage["prompt_tokens"] + usage["completion_tokens"], "Raw usage does not match accounted tokens")
             tokens += receipt["accounted_actual_tokens"]
-        if allocation in {"hardware_smoke", "developmental_prefixes"}:
+        if identity.startswith(actor_prefixes) or (development and allocation == "hardware_smoke"):
             phase_ids.add(identity)
+            expected_allocation = "hardware_smoke" if development and allocation == "hardware_smoke" else ("developmental_prefixes" if development else "validation_actors")
+            require(allocation == expected_allocation, "Phase request allocation differs")
             body = strict_json(row["body_utf8"])
             require(all(body.get(key) == value for key, value in actor_sampler.items()), "Actor sampler changed")
             require(body["max_tokens"] == config["limits"]["actor_max_output_tokens"]
@@ -140,7 +147,8 @@ def main():
             require(read_json(replay / "hardware-smoke" / name) == read_json(completed / "hardware-smoke" / name), "Hardware receipt replay differs")
         return {"status": "passed", "new_model_calls": 0}
 
-    check("hardware", hardware)
+    if development:
+        check("hardware", hardware)
     catalog = load_accommodations(args.catalog_csv, config["task_policy"]["catalog_csv_sha256"])
     prompts = {role: (code / config["protocol"][role + "_prompt"]).read_text() for role in ("A", "B")}
 
@@ -152,7 +160,12 @@ def main():
         saved_results = {task["task_id"]: read_json(job / "results" / (task["task_id"] + ".json")) for task in group["tasks"][:2]}
         replayed_results = {}
         protocol = Protocol(number, abe_cycle.namespace(config["run_id"], number, "prefix"), catalog)
-        private = {role: (code / config["protocol"]["private_" + role + "_prompt"]).read_text() for role in ("A", "B")} if number == 5 else {}
+        private = {role: (code / config["protocol"]["private_" + role + "_prompt"]).read_text() for role in ("A", "B")} if number in config["selection"]["developmental_induced_groups"] or number in config["selection"]["independent_validation_induced_groups"] else {}
+
+        require(read_json(job / "status.json")["induced"] == bool(private), "Prefix induction status differs")
+        expected_origins = {role: {"origin_event_id": protocol.branch_id + "/private-input-" + role,
+                                   "content_sha256": sha256(text.encode()).hexdigest()} for role, text in private.items()}
+        require(read_json(job / "private-goal-origins.json") == expected_origins, "Private-goal origin receipt differs")
 
         def generate(role, messages, schema, logical_id, deadline, remaining):
             body = constrained_payload("qwen-native-dev", actor_sampler, messages, schema, config["limits"]["actor_max_output_tokens"])
@@ -202,7 +215,7 @@ def main():
         return {"status": "passed", "tasks_replayed": len(replayed_results), "assigned_tasks": len(saved_results),
                 "source_archive_sha256": source["archive_sha256"], "world_state_sha256": fingerprint(protocol.commits)}
 
-    for number in (4, 5):
+    for number in selected:
         check(f"prefix-{number}", lambda number=number: prefix(number))
     if consumed != phase_ids:
         errors.append({"check": "exact_cache_consumption", "unconsumed": sorted(phase_ids - consumed), "extra": sorted(consumed - phase_ids)})
