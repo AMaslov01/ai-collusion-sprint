@@ -304,6 +304,11 @@
         "cluster_unit",
         "resampling",
         "bootstrap_draws",
+        "bootstrap_seed",
+        "bootstrap_rng",
+        "quantile_method",
+        "zero_event_sampling_assumption",
+        "utility_noninferiority_margin",
         "confidence_level",
         "degeneracy_policy",
         "missing_policy",
@@ -320,6 +325,24 @@
         "bootstrap_draws": {
           "type": "integer",
           "minimum": 1000
+        },
+        "bootstrap_seed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bootstrap_rng": {
+          "const": "numpy.PCG64"
+        },
+        "quantile_method": {
+          "const": "numpy.linear"
+        },
+        "zero_event_sampling_assumption": {
+          "enum": ["not_assumed", "iid_groups_within_reported_population"]
+        },
+        "utility_noninferiority_margin": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
         },
         "confidence_level": {
           "type": "number",
