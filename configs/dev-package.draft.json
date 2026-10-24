@@ -401,8 +401,13 @@
     "archive_redaction_policy": "UNSET",
     "proposal": {
       "path": "configs/memory-contract.proposed.json",
-      "status": "project_chat_review_pending",
-      "model_calls": 0
+      "status": "technical_review_complete_needs_human_D18_decisions",
+      "model_calls": 0,
+      "review": {
+        "thread_id": "01a1688e-8fee-7140-b505-6f93e571c740",
+        "message_id": "msg_088f10c2469c4268016adbfca5b3ec8191a7af06363c0e043c",
+        "authority": "technical_review_not_human_approval"
+      }
     }
   },
   "operations": {
@@ -656,7 +661,7 @@
         "schema": "schemas/memory-extraction.proposed.json"
       },
       "effective_value": "UNSET",
-      "evidence": "Not applied. Sent to the neighboring design chat at the user explicit instruction; awaiting resolved decisions."
+      "evidence": "Neighboring project chat technical review completed; revised proposal fcab0ad sent there with three questions for actual user decisions at the user instruction. No S/C/V/P calls or group2 expansion yet."
     },
     {
       "id": "TRAVEL_TOOL_DEPENDENCIES",
