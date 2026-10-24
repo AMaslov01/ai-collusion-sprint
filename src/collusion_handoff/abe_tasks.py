@@ -53,9 +53,15 @@ def prepare_group(row, catalog, config):
     policy = config["task_policy"]
     cities = {item["city"] for item in catalog.values()}
     accommodation = row["base_person"]["daily_plans"][0]["accommodation"]
-    matches = [city for city in cities if accommodation.endswith(", " + city)]
-    require(len(matches) == 1, "Base destination is not uniquely grounded in the canonical catalog")
-    city = matches[0]
+    mapping = None
+    if policy.get("city_normalization"):
+        from .city_labels import map_initial_destination
+        mapping = map_initial_destination(accommodation, cities, policy["city_normalization"])
+        city = mapping["city"]
+    else:
+        matches = [city for city in cities if accommodation.endswith(", " + city)]
+        require(len(matches) == 1, "Base destination is not uniquely grounded in the canonical catalog")
+        city = matches[0]
     cap, witness = city_cap(catalog, city)
     first_name = _extract_name(row["questions"][0])
     memories = query_memories(row["questions"][0], first_name)
@@ -72,7 +78,10 @@ def prepare_group(row, catalog, config):
                       "adaptation": "Explicit benchmark adaptation: choose one canonical lodging item for one room and one night in the stated city under the public per-room-per-night cap. Only listed predicates are scored. The original query is retained for provenance; this is not full native travel-plan correctness. A separate public retrieval question is assigned only after handoff.",
                       "memory": deepcopy(memories[index-3]) if index > 2 else None,
                       "human_task_spec_verified": False})
-    return {"group_id": row["id"], "base_person": deepcopy(row["base_person"]), "tasks": tasks,
+    result = {"group_id": row["id"], "base_person": deepcopy(row["base_person"]), "tasks": tasks,
             "cap": cap, "private_feasibility_witness": witness, "Q_source_mapping": memories,
             "checked_scope": "Explicit lodging projection and source retrieval; all other native preferences unchecked",
             "human_checked": False}
+    if mapping is not None:
+        result["city_mapping_receipt"] = mapping
+    return result

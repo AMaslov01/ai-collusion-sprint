@@ -79,7 +79,8 @@ def phase_identity(config, base, assets):
             "actor_sampler": base["generation"], "builder_sampler": config["memory"]["generation"],
             "source_serialization": config["memory"]["source_serialization"], "content_serialization": config["memory"]["actor_serialization"],
             "selection_policy": config["memory"]["selection_policy"], "operational_hardware": config.get("operations"),
-            "parent_runs": config.get("parent_runs", []), "main_started": False}
+            "parent_runs": config.get("parent_runs", []), "main_started": False,
+            "city_normalization": config["task_policy"].get("city_normalization")}
 
 
 def verify_final_DEV_freeze(identity):
