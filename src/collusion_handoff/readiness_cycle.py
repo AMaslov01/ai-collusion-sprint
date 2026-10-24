@@ -60,6 +60,16 @@ def phase_identity(config, base, assets):
             "selection_policy": config["memory"]["selection_policy"], "main_started": False}
 
 
+def verify_final_DEV_freeze(identity):
+    freeze_path = REVIEW / "final-DEV-validation-freeze.json"
+    freeze = read_json(freeze_path)
+    require(freeze["status"] == "reviewed_bounded_DEV_validation_freeze" and freeze["main_allowed"] is False, "No reviewed final DEV freeze")
+    for key in ("code_commit", "config_sha256", "assets_sha256"):
+        require(freeze[key] == identity[key], "Final DEV freeze changed after source access: " + key)
+    require(freeze.get("design_message_id") and freeze.get("developmental_review_sha256"), "DEV freeze provenance missing")
+    return freeze
+
+
 def verify_dispatch(identity):
     dispatch_path = REVIEW / ("dispatch-" + identity["phase"] + ".json")
     receipt = read_json(dispatch_path)
@@ -82,6 +92,23 @@ def known_sources():
             3: Path("/previous/heldout/memory/group-3/source.json")}
 
 
+def fresh_definitions(config):
+    spec = config["fresh_fixtures"]
+    require(sha256((Path("/fresh-fixtures") / spec["lock_file"]).read_bytes()).hexdigest() == spec["lock_sha256"], "Fresh expected lock changed after freeze")
+    lock = read_json(Path("/fresh-fixtures") / spec["lock_file"])
+    for name in (spec["input_file"], spec["component_domain_file"]):
+        require(sha256((Path("/fresh-fixtures") / name).read_bytes()).hexdigest() == lock["file_sha256"][name], "Fresh input/domain lock mismatch")
+    definitions = read_json(Path("/fresh-fixtures") / spec["input_file"])["fixtures"]
+    domain = {item["fixture_id"]: item for item in read_json(Path("/fresh-fixtures") / spec["component_domain_file"])["fixtures"]}
+    result = []
+    for item in definitions:
+        value = deepcopy(item)
+        value["P_eligible"] = domain[item["fixture_id"]]["P_eligible"]
+        result.append(value)
+    require(len(result) == 16 and sum(len(item["candidates"]) for item in result) == 37, "Wrong locked fresh matrix")
+    return result
+
+
 def smoke_payload(config):
     schema = {"type": "object", "properties": {"value": {"const": "ok"}}, "required": ["value"], "additionalProperties": False}
     return constrained_payload(ALIAS, config["memory"]["generation"],
@@ -98,6 +125,41 @@ def preflight():
         atomic_json(WORK / "phase-manifest.json", identity)
         atomic_json(WORK / "preflight.json", {"status": "passed_no_model_calls", "identity": identity,
                     "actor_preflight": read_json(WORK / "actor-preflight.json"), "new_model_calls": 0})
+        return
+    if identity["phase"] == "validation-prefix-v1":
+        verify_final_DEV_freeze(identity)
+        from .abe_cycle import actor_preflight
+        actor_preflight(config, base, assets, WORK, [6, 7])
+        atomic_json(WORK / "phase-manifest.json", identity)
+        atomic_json(WORK / "preflight.json", {"status": "passed_no_model_calls", "identity": identity,
+                    "actor_preflight": read_json(WORK / "actor-preflight.json"), "new_model_calls": 0})
+        return
+    if identity["phase"] == "validation-continuations-v1":
+        freeze = verify_final_DEV_freeze(identity)
+        probes, sources = {}, {}
+        prefix_identity = read_json(ROOT / "validation-prefix-v1/phase-manifest.json")
+        for key in ("code_commit", "config_sha256", "assets_sha256"):
+            require(prefix_identity[key] == identity[key], "Fresh code or assets retuned after prefix")
+        for number in (6, 7):
+            source_path = ROOT / f"validation-prefix-v1/prefix/group-{number}/source.json"
+            source = read_json(source_path)
+            sources[str(number)] = {"archive_sha256": source["archive_sha256"], "file_sha256": sha256(source_path.read_bytes()).hexdigest()}
+            for stage in ("S", "C"):
+                probes[f"group-{number}/{stage}"] = payload(stage, source, [], config, assets)
+        for definition in fresh_definitions(config):
+            source, candidates = fixture_source(definition)
+            for stage, selected in (("V", candidates), ("P", fixture_eligible(definition, candidates))):
+                probes[f"fresh-{definition['fixture_id']}/{stage}"] = payload(stage, source, selected, config, assets)
+        tokenizer = AutoTokenizer.from_pretrained("/model", local_files_only=True)
+        for key, body in probes.items():
+            token_ids = tokenizer.apply_chat_template(body["messages"], tokenize=True, add_generation_prompt=True, enable_thinking=False, return_dict=False)
+            require(len(token_ids) + body["max_tokens"] <= 32768, "Fresh full input does not fit: " + key)
+        atomic_json(WORK / "phase-manifest.json", identity)
+        atomic_json(WORK / "assets.json", assets)
+        atomic_json(WORK / "wire-probes.json", probes)
+        atomic_json(WORK / "preflight.json", {"status": "passed_no_model_calls", "identity": identity, "sources": sources,
+                    "maximum_memory_calls": 8, "maximum_fresh_fixture_calls": 32, "maximum_continuation_calls": 240,
+                    "new_model_calls": 0, "main_started": False})
         return
     if identity["phase"] == "development-checkpoint-memory-v1":
         probes = {}
@@ -161,7 +223,7 @@ def dispatch(budget, body, logical_id, allocation, job):
         raise ServiceFailure(str(error), kind="accounting_failure") from error
 
 
-def memory_job(source, job, identity, config, assets, budget, count_tokens):
+def memory_job(source, job, identity, config, assets, budget, count_tokens, *, allocation="developmental_memory_and_known_fixtures"):
     require(fingerprint(source["archive"]) == source["archive_sha256"], "Permitted archive changed")
     require(not job.exists(), "Immutable memory job already exists")
     job.mkdir(parents=True, mode=0o700)
@@ -172,7 +234,7 @@ def memory_job(source, job, identity, config, assets, budget, count_tokens):
     def generate(stage, candidates_messages):
         body = constrained_payload(ALIAS, config["memory"]["generation"], candidates_messages, assets[stage]["schema"],
                                    config["memory"]["stages"][stage]["max_output_tokens"])
-        response = dispatch(budget, body, identity + "/" + stage, "developmental_memory_and_known_fixtures", job)
+        response = dispatch(budget, body, identity + "/" + stage, allocation, job)
         return content(response)
     try:
         summary = build_packages(source, {"packing": {"archive_wrapper": config["memory"]["archive_wrapper"]}}, assets,
@@ -188,7 +250,7 @@ def memory_job(source, job, identity, config, assets, budget, count_tokens):
     return status
 
 
-def fixture_job(definition, job, identity, config, assets, budget):
+def fixture_job(definition, job, identity, config, assets, budget, *, allocation="developmental_memory_and_known_fixtures"):
     require(not job.exists(), "Immutable fixture job already exists")
     job.mkdir(parents=True, mode=0o700)
     source, candidates = fixture_source(definition)
@@ -200,7 +262,7 @@ def fixture_job(definition, job, identity, config, assets, budget):
     for stage, selected in (("V", candidates), ("P", eligible)):
         try:
             body = payload(stage, source, selected, config, assets)
-            raw = content(dispatch(budget, body, identity + "/" + stage, "developmental_memory_and_known_fixtures", job))
+            raw = content(dispatch(budget, body, identity + "/" + stage, allocation, job))
             value = decode_v4(stage, raw, assets[stage]["schema"])
             atomic_json(job / "automatic-withheld/stages" / (stage + ".json"), value)
             chosen, _ = apply_verdicts(selected, value["verdicts"], field="verdict" if stage == "V" else "label", retain="supported" if stage == "V" else "allow")
@@ -227,7 +289,7 @@ def run_client():
     config, base, assets = settings()
     identity = phase_identity(config, base, assets)
     receipt = verify_dispatch(identity)
-    require(identity["phase"] in {"development-memory-v1", "development-prefix-v1", "development-checkpoint-memory-v1"}, "This phase is not yet implemented/reviewed")
+    require(identity["phase"] in {"development-memory-v1", "development-prefix-v1", "development-checkpoint-memory-v1", "validation-prefix-v1", "validation-continuations-v1"}, "This phase is not yet implemented/reviewed")
     master = {"run_id": config["run_id"], "authority": config["authority"], "limits": config["limits"],
               "allocations": config["allocations"], "selection": config["selection"], "model": base["model"],
               "runtime": base["runtime"], "paid_api_budget_usd": 0}
@@ -245,6 +307,28 @@ def run_client():
         if identity["phase"] == "development-prefix-v1":
             from .abe_cycle import prefix_phase
             return prefix_phase(config, base, budget, WORK)
+        if identity["phase"] == "validation-prefix-v1":
+            from .abe_cycle import validation_prefix_phase
+            return validation_prefix_phase(config, base, budget, WORK)
+        if identity["phase"] == "validation-continuations-v1":
+            verify_final_DEV_freeze(identity)
+            reviewed_sources = read_json(Path("/preflight/preflight.json"))["sources"]
+            reference_locks = read_json(REVIEW / "source-first-reference-locks.json")
+            require(reference_locks["origin"] == "AI_source_only_not_human_gold", "Reference origin must remain explicit")
+            for number in (6, 7):
+                source_path = ROOT / f"validation-prefix-v1/prefix/group-{number}/source.json"
+                require(sha256(source_path.read_bytes()).hexdigest() == reviewed_sources[str(number)]["file_sha256"], "Reviewed fresh source changed")
+                require(reference_locks["groups"][str(number)]["source_file_sha256"] == reviewed_sources[str(number)]["file_sha256"] and
+                        reference_locks["groups"][str(number)].get("reference_sha256"), "Source-first lock missing before outputs")
+            from .abe_cycle import validation_continuations_phase
+            validation_continuations_phase(config, base, assets, budget, WORK)
+            for definition in fresh_definitions(config):
+                key = "fresh-" + definition["fixture_id"]
+                jobs[key] = fixture_job(definition, WORK / "fixtures" / key, identity["phase"] + "/" + key, config, assets, budget,
+                                        allocation="fresh_controlled_fixtures")
+            atomic_json(WORK / "fixture-phase-status.json", {"status": "finished_with_explicit_job_statuses", "jobs": jobs,
+                        "global_budget": budget.state(), "main_started": False})
+            return
         if identity["phase"] == "development-checkpoint-memory-v1":
             reviewed = read_json(Path("/preflight/preflight.json"))["sources"]
             for number in (4, 5):
@@ -286,7 +370,9 @@ def main():
     config, base, assets = settings()
     identity = phase_identity(config, base, assets)
     verify_dispatch(identity)
-    require(identity["phase"] in {"development-memory-v1", "development-prefix-v1", "development-checkpoint-memory-v1"}, "No unreviewed phase startup")
+    require(identity["phase"] in {"development-memory-v1", "development-prefix-v1", "development-checkpoint-memory-v1", "validation-prefix-v1", "validation-continuations-v1"}, "No unreviewed phase startup")
+    if identity["phase"].startswith("validation-"):
+        verify_final_DEV_freeze(identity)
     deadline = min(float(os.environ["PACKAGE_DEADLINE_UNIX"]), time.time() + config["limits"]["gpu_service_wall_seconds"])
     smoke.supervise(base, deadline, client_module="collusion_handoff.readiness_cycle", alias=ALIAS,
                     scope="v4_bounded_developmental_memory_only", server_extra_args=("--structured-outputs-config.backend", "xgrammar"))

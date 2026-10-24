@@ -78,9 +78,11 @@ class CycleBudget:
             raise AccountingFailure("Unresolved or unknown spend blocks new requests; reserved budget is preserved")
         if logical_id is not None:
             require(logical_id not in state["logical_ids"], "Logical request already spent; no hidden retry")
-            require(state["attempts"] < self.contract["limits"]["max_new_model_attempts"], "Global attempt ceiling reached")
+            if state["attempts"] >= self.contract["limits"]["max_new_model_attempts"]:
+                raise BudgetExceeded("Global attempt ceiling reached")
             require(allocation in self.contract["allocations"], "Unapproved allocation")
-            require(state["allocations"].get(allocation, 0) < self.contract["allocations"][allocation], "Stage allocation exhausted")
+            if state["allocations"].get(allocation, 0) >= self.contract["allocations"][allocation]:
+                raise BudgetExceeded("Stage allocation exhausted")
         if state["accounted_input_output_tokens"] + reserve > self.contract["limits"]["max_input_output_tokens"]:
             raise BudgetExceeded("Global token ceiling reached")
         return state

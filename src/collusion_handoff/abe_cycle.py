@@ -32,7 +32,7 @@ def namespace(run_id, group_id, role):
     return "session-" + fingerprint([run_id, group_id, role])[:20]
 
 
-def prepare_registry(config, selected_ids):
+def prepare_registry(config, selected_ids, *, flow_path=None):
     data = Path("/tasks/data.jsonl").read_bytes()
     base = read_json(Path("/code") / config["base_runtime_config"])
     require(sha256(data).hexdigest() == base["data"]["file_hashes"]["sha256"], "Pinned task source changed")
@@ -40,7 +40,16 @@ def prepare_registry(config, selected_ids):
     selected = [row for row in raw if row["id"] in selected_ids]
     require({row["id"] for row in selected} == set(selected_ids), "Assigned actual group ID unavailable")
     catalog = load_accommodations("/database/accommodations/clean_accommodations_2022.csv", config["task_policy"]["catalog_csv_sha256"])
-    groups = {row["id"]: prepare_group(row, catalog, config) for row in selected}
+    groups, flow = {}, []
+    for row in selected:
+        try:
+            groups[row["id"]] = prepare_group(row, catalog, config)
+            flow.append({"group_id": row["id"], "status": "eligible_before_model_outputs", "replacement": False})
+        except ValueError as error:
+            flow.append({"group_id": row["id"], "status": "ineligible_before_model_outputs", "reason": str(error), "replacement": False})
+    if flow_path is not None:
+        atomic_json(flow_path, {"assigned_ids": selected_ids, "groups": flow, "model_outputs_used": False})
+    require(set(groups) == set(selected_ids), "Assigned group ineligible; preserve flow, do not replace")
     return catalog, groups
 
 
@@ -68,6 +77,8 @@ def actor_generator(config, base, budget, job, allocation, *, expected_initial_r
             raise ServiceFailure(str(error), kind="model_service_failure") from error
         except AccountingFailure as error:
             raise ServiceFailure(str(error), kind="accounting_failure") from error
+        except RuntimeError as error:
+            raise AdmissionFailure(str(error), kind="phase_stopped", stop_phase=True) from error
     return generate
 
 
@@ -142,7 +153,7 @@ def prefix_group(group, catalog, config, base, budget, work, *, induced, allocat
 def actor_preflight(config, base, assets, work, selected_ids):
     """Actual initial action requests and source registry; no model calls."""
     from transformers import AutoTokenizer
-    catalog, groups = prepare_registry(config, selected_ids)
+    catalog, groups = prepare_registry(config, selected_ids, flow_path=work / "eligibility-flow.json")
     tokenizer = AutoTokenizer.from_pretrained("/model", local_files_only=True)
     probes = {}
     for group_id, group in groups.items():
@@ -169,7 +180,7 @@ def actor_preflight(config, base, assets, work, selected_ids):
 
 
 def prefix_phase(config, base, budget, work):
-    catalog, groups = prepare_registry(config, [4, 5])
+    catalog, groups = prepare_registry(config, [4, 5], flow_path=work / "eligibility-flow.json")
     atomic_json(work / "assigned-opportunities.json", [{"group_id": number, "traveler_index": index, "scope": "DEV_prefix"}
                                                       for number in (4, 5) for index in (1, 2)])
     for number in (4, 5):
@@ -247,6 +258,73 @@ def continue_group(prefix_job, packages, config, base, budget, work, *, group_re
             own_events = [{"event_id": event["event_id"], "branch_id": event["branch_id"]} for event in runner.protocol.events]
             isolation = isolation_observations(mapping[arm], [], own_events)
             require(isolation["isolated"], "Cross-branch event entered recipient")
-        atomic_json(group_work / "status.json", {"status": "complete" if fatal is None else "stopped_with_assigned_not_run",
+            for request in runner.requests:
+                require(not any(item["event_type"] == "private_goal_input" for item in request["message_provenance"]),
+                        "Private input origin entered a recipient request")
+                require(all(item["message_sha256"] == fingerprint(request["payload"]["messages"][item["message_index"]])
+                            for item in request["message_provenance"]), "Request provenance/wire hash differs")
+        complete = all(item["status"] not in {"not_run_phase_failure", "not_run_missing_assigned_memory"} for item in assigned)
+        summary_status = "stopped_with_assigned_not_run" if fatal else ("complete" if complete else "completed_with_explicit_missing_arms")
+        atomic_json(group_work / "status.json", {"status": summary_status,
                     "opportunities": assigned, "failure": fatal, "main_started": False})
     return group_work
+
+
+def validation_prefix_phase(config, base, budget, work):
+    """Fresh sources open only after this phase's final code/rules freeze."""
+    catalog, groups = prepare_registry(config, [6, 7], flow_path=work / "eligibility-flow.json")
+    atomic_json(work / "private-task-registry.json", {"groups": groups})
+    assigned = [{"group_id": number, "traveler_index": index, "arm": arm, "status": "assigned_before_branching"}
+                for number in (6, 7) for arm in config["selection"]["arms"] for index in (3, 4)]
+    atomic_json(work / "assigned-future-opportunities.json", assigned)
+    for number in (6, 7):
+        reviewed = read_json(Path("/preflight/private-task-registry.json"))["groups"][str(number)]
+        require(groups[number] == reviewed, "Fresh registry differs from pre-inference specification")
+        prefix_group(groups[number], catalog, config, base, budget, work, induced=True, allocation="validation_actors")
+    atomic_json(work / "phase-status.json", {"status": "fresh_prefix_sources_collected", "groups": [6, 7],
+                "global_budget": budget.state(), "source_first_lock_required_before_memory_output_review": True, "main_started": False})
+
+
+def validation_continuations_phase(config, base, assets, budget, work):
+    from .readiness_cycle import memory_job
+    from transformers import AutoTokenizer
+    catalog, groups = prepare_registry(config, [6, 7])
+    tokenizer = AutoTokenizer.from_pretrained("/model", local_files_only=True)
+    assigned = read_json(Path("/cycle/validation-prefix-v1/assigned-future-opportunities.json"))
+    require(len(assigned) == 24, "Fresh phase assigned denominator changed")
+    atomic_json(work / "assigned-future-opportunities.json", assigned)
+    failure = None
+    try:
+        for number in (6, 7):
+            prefix = Path("/cycle/validation-prefix-v1/prefix") / f"group-{number}"
+            group = read_json(prefix / "private-registry-bound.json")
+            source = read_json(prefix / "source.json")
+            memory = work / f"memory/group-{number}"
+            memory_job(source, memory, "validation-continuations-v1/" + f"group-{number}", config, assets, budget,
+                       lambda text: len(tokenizer.encode(text, add_special_tokens=False)), allocation="validation_memory")
+            packages = {path.stem: read_json(path) for path in (memory / "automatic-withheld/packages").glob("*.json")}
+            continue_group(prefix, packages, config, base, budget, work, group_registry=group, catalog=catalog)
+    except Exception:
+        failure = traceback.format_exc()
+        raise
+    finally:
+        from .abe_evaluation import evaluate_opportunity
+        report = []
+        for item in assigned:
+            number, arm, index = item["group_id"], item["arm"], item["traveler_index"]
+            task = groups[number]["tasks"][index-1]
+            branch_id = namespace(config["run_id"], number, "recipient/" + arm)
+            result_path = work / f"continuations/group-{number}" / branch_id / "results" / (task["task_id"] + ".json")
+            if result_path.exists():
+                try:
+                    result = read_json(result_path)
+                except ValueError:
+                    result = {"status": "measurement_corruption", "evaluation": {"H": None, "U": None, "Q": None}}
+            else:
+                result = {"task_id": task["task_id"], "status": "not_run_after_phase_failure" if failure else "not_run_missing_assigned_memory",
+                          "reason": failure, "model_calls": 0, "evaluation": evaluate_opportunity(task, catalog, [], ledger_complete=True)}
+                atomic_json(result_path, result)
+            report.append({**item, "task_id": task["task_id"], "result": result})
+        atomic_json(work / "all-assigned-results.json", {"assigned": 24, "observed": report, "source": "Frozen pre-branching opportunities, never glob completed results"})
+        atomic_json(work / "phase-status.json", {"status": "stopped_with_all_assigned_statuses" if failure else "final_assigned_matrix_finished_with_explicit_statuses",
+                    "groups": [6, 7], "global_budget": budget.state(), "failure": failure, "main_started": False})

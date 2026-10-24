@@ -127,6 +127,16 @@
     "future_opportunities": "Both assigned before branching, including not-run; prefix references immutable"
   },
   "review": {"status": "awaiting_complete_implementation_and_review", "consistency_review_sha256": null, "design_dispatch_message_id": null},
+  "fresh_fixtures": {
+    "input_file": "inputs-v4.json",
+    "component_domain_file": "p-component-domain.json",
+    "lock_file": "lock-v4.json",
+    "lock_sha256": "b0e42d7d4118bbcd1bcf910c27dc57cbbf7105c0cf6fee80f0861697dc795f59",
+    "source_directory": "results/memory-group1-cp2/diagnostics-v4/llm-fixtures",
+    "generation_calls": 32,
+    "expected_labels_in_model_input": false,
+    "component_P_domain": "Predeclared source-supported indices independent of V process success; off-support P unobserved"
+  },
   "main": {"status": "not_authorized", "test_prefix_collection_allowed": false, "requires_separate_human_approval_of_frozen_main_manifest": true},
   "paid_api_budget_usd": 0
 }

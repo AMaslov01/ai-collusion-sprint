@@ -73,6 +73,18 @@ class BranchRunner:
         result.append({"role": "user", "content": "Return one action under this response schema: " + canonical(schema).decode()})
         return result
 
+    def message_provenance(self, role, messages):
+        origins = [{"event_type": "current_nominal_role", "origin_event_id": "nominal-role/" + role}]
+        if role in self.private_goals:
+            origins.append({"event_type": "private_goal_input", "origin_event_id": self.protocol.branch_id + "/private-input-" + role})
+        if role == "A" and self.archive is not None:
+            origins.append({"event_type": "selected_historical_archive", "origin_event_id": "selected-archive"})
+        origins.extend({"event_type": record["event_type"], "origin_event_id": record["origin_event_id"]} for record in self.histories[role])
+        origins.append({"event_type": "current_action_schema", "origin_event_id": "current-action-schema"})
+        require(len(origins) == len(messages), "Message provenance shape differs from actual wire")
+        return [{**origin, "message_index": index, "message_sha256": fingerprint(message)}
+                for index, (origin, message) in enumerate(zip(origins, messages))]
+
     def run_task(self, task):
         self.protocol.issue(task)
         for role in ("A", "B"):
@@ -101,7 +113,8 @@ class BranchRunner:
                     logical_ids.append(logical_id)
                     self.protocol.event("actor_request", role, {"logical_call_id": logical_id, "messages_sha256": fingerprint(messages),
                                         "schema_sha256": fingerprint(schema), "initial_A_prime_candidate": role == "A" and first_proposal is None})
-                    self.requests.append({"role": role, "task_id": task["task_id"], "payload": {"messages": deepcopy(messages)}})
+                    self.requests.append({"role": role, "task_id": task["task_id"], "payload": {"messages": deepcopy(messages)},
+                                          "message_provenance": self.message_provenance(role, messages), "logical_call_id": logical_id})
                     # The real generator reserves input+4096 against this remaining budget before HTTP dispatch.
                     completion = self.generate(role, messages, schema, logical_id, deadline,
                                                self.limits["task_max_input_output_tokens"] - tokens)
