@@ -4,7 +4,7 @@ set -euo pipefail
 CAN_SHA=${1:?Full committed code SHA}
 CAN_PHASE=${2:?Reviewed phase name}
 [[ "$CAN_SHA" =~ ^[0-9a-f]{40}$ ]]
-case "$CAN_PHASE" in development-memory-v1|development-prefix-v1|development-checkpoint-memory-v1) ;; *) exit 2;; esac
+case "$CAN_PHASE" in development-memory-v1|development-prefix-v1|development-checkpoint-memory-v1|validation-prefix-v1|validation-continuations-v1) ;; *) exit 2;; esac
 test "$(hostname)" = caniculus.appliedai.local
 test "$(id -un)" = a.maslov
 test "$(id -u)" -ne 0
@@ -21,6 +21,14 @@ CAN_VENDOR="$CAN_PROJECT/dependencies/travel-tools-d0bc2174eea3b3737f6922b89897d
 CAN_TASKS="$CAN_PROJECT/bootstrap/preparation-33d29710c408fd9851e9de0db5e436cc623b595c/task-data"
 CAN_UPSTREAM=/opt/ai-collusion/sources/MemoryArena
 CAN_UUID=GPU-441e6008-cd27-34b5-c81a-17dad9d4a894
+CAN_EXTRA_MOUNTS=()
+if [[ "$CAN_PHASE" == validation-* ]]; then
+ CAN_FRESH="$CAN_PROJECT/inputs/readiness-v4-fresh-b0e42d7d"
+ test "$(realpath "$CAN_FRESH")" = "$CAN_FRESH"
+ test "$(stat -c %u "$CAN_FRESH")" = "$(id -u)"
+ test -f "$CAN_REVIEW/final-DEV-validation-freeze.json"
+ CAN_EXTRA_MOUNTS+=(--mount "type=bind,src=$CAN_FRESH,dst=/fresh-fixtures,readonly")
+fi
 for CAN_PATH in "$CAN_PROJECT" "$CAN_CODE" "$CAN_ROOT" "$CAN_PREFLIGHT" "$CAN_REVIEW" "$CAN_MODEL" "$CAN_IDENTITIES" "$CAN_VENDOR" "$CAN_TASKS" "$CAN_PROJECT/cache" "$CAN_PROJECT/inputs/MemoryArena" "$CAN_PROJECT/inputs/travel-database" "$CAN_PROJECT/runs/repair-cycle-v3-20261024"; do
  test "$(realpath "$CAN_PATH")" = "$CAN_PATH"
  test "$(stat -c %u "$CAN_PATH")" = "$(id -u)"
@@ -86,6 +94,7 @@ docker run -d --name "$CAN_NAME" --label owner=a.maslov --label scope=readiness-
  --mount "type=bind,src=$CAN_PROJECT/inputs/MemoryArena,dst=$CAN_UPSTREAM,readonly" --mount "type=bind,src=$CAN_PROJECT/inputs/travel-database,dst=/database,readonly" \
  --mount "type=bind,src=$CAN_VENDOR,dst=/vendor,readonly" --mount "type=bind,src=$CAN_PROJECT/runs/repair-cycle-v3-20261024,dst=/previous,readonly" \
  --mount "type=bind,src=$CAN_TASKS,dst=/tasks,readonly" \
+ "${CAN_EXTRA_MOUNTS[@]}" \
  --mount "type=bind,src=$CAN_ROOT,dst=/cycle" --mount "type=bind,src=$CAN_WORK,dst=/work" --mount "type=bind,src=$CAN_PROJECT/cache,dst=/cache" \
  --mount "type=bind,src=$CAN_PROJECT/bootstrap/control,dst=/control,readonly" --entrypoint /usr/bin/timeout "$(cat "$CAN_PROJECT/bootstrap/environment/image-id.txt")" \
  --signal=TERM --kill-after="${CAN_GRACE}s" "${CAN_REMAINING}s" /bin/bash -c 'umask 077; exec python3 -m collusion_handoff.readiness_cycle > /work/supervisor.log 2>&1'

@@ -3,7 +3,7 @@
 set -euo pipefail
 CAN_SHA=${1:?Full committed code SHA}
 CAN_PHASE=${2:-development-memory-v1}
-case "$CAN_PHASE" in development-memory-v1|development-prefix-v1|development-checkpoint-memory-v1) ;; *) exit 2;; esac
+case "$CAN_PHASE" in development-memory-v1|development-prefix-v1|development-checkpoint-memory-v1|validation-prefix-v1|validation-continuations-v1) ;; *) exit 2;; esac
 [[ "$CAN_SHA" =~ ^[0-9a-f]{40}$ ]]
 test "$(hostname)" = caniculus.appliedai.local
 test "$(id -un)" = a.maslov
@@ -18,6 +18,21 @@ CAN_VENDOR="$CAN_PROJECT/dependencies/travel-tools-d0bc2174eea3b3737f6922b89897d
 CAN_TASKS="$CAN_PROJECT/bootstrap/preparation-33d29710c408fd9851e9de0db5e436cc623b595c/task-data"
 CAN_ROOT="$CAN_PROJECT/runs/readiness-cycle-v4-20261024"
 CAN_FIXTURES="$CAN_PROJECT/inputs/readiness-v4-independent-a56492c"
+CAN_REVIEW="$CAN_FIXTURES"
+CAN_FRESH="$CAN_PROJECT/inputs/readiness-v4-fresh-b0e42d7d"
+CAN_EXTRA_MOUNTS=()
+if [ -d "$CAN_FRESH" ]; then
+ test "$(realpath "$CAN_FRESH")" = "$CAN_FRESH"
+ test "$(stat -c %u "$CAN_FRESH")" = "$(id -u)"
+ CAN_EXTRA_MOUNTS+=(--mount "type=bind,src=$CAN_FRESH,dst=/fresh-fixtures,readonly")
+fi
+if [[ "$CAN_PHASE" == validation-* ]]; then
+ CAN_REVIEW="$CAN_PROJECT/inputs/readiness-v4-review-$CAN_SHA"
+ test -f "$CAN_REVIEW/final-DEV-validation-freeze.json"
+ test -d "$CAN_FRESH"
+fi
+test "$(realpath "$CAN_REVIEW")" = "$CAN_REVIEW"
+test "$(stat -c %u "$CAN_REVIEW")" = "$(id -u)"
 for CAN_PATH in "$CAN_PROJECT" "$CAN_CODE" "$CAN_BASE" "$CAN_MODEL" "$CAN_VENDOR" "$CAN_TASKS" "$CAN_FIXTURES" "$CAN_PROJECT/cache" "$CAN_PROJECT/inputs/MemoryArena" "$CAN_PROJECT/inputs/travel-database"; do
  test "$(realpath "$CAN_PATH")" = "$CAN_PATH"
  test "$(stat -c %u "$CAN_PATH")" = "$(id -u)"
@@ -52,9 +67,10 @@ docker run -d --name "$CAN_NAME" --label owner=a.maslov --label scope=readiness-
  --mount "type=bind,src=$CAN_VENDOR,dst=/vendor,readonly" --mount "type=bind,src=$CAN_TASKS,dst=/tasks,readonly" \
  --mount "type=bind,src=$CAN_MODEL,dst=/model,readonly" --mount "type=bind,src=$CAN_WORK,dst=/work" \
  --mount "type=bind,src=$CAN_FIXTURES,dst=/review-v4,readonly" \
+ --mount "type=bind,src=$CAN_REVIEW,dst=/review,readonly" "${CAN_EXTRA_MOUNTS[@]}" \
  --mount "type=bind,src=$CAN_PROJECT/cache,dst=/cache" --mount "type=bind,src=$CAN_PROJECT/bootstrap/control,dst=/control,readonly" \
  --workdir "$CAN_UPSTREAM" --entrypoint /usr/bin/timeout "$(cat "$CAN_PROJECT/bootstrap/environment/image-id.txt")" \
  --signal=TERM --kill-after=30s "${CAN_REMAINING}s" /bin/bash -c \
- 'set -e; umask 077; test ! -e /control/STOP; python3 -m unittest discover -s /code/tests -v > /work/unittest.log 2>&1; python3 /code/scripts/probe-structured-output.py > /work/probe.log 2>&1; python3 /code/scripts/measure-memory-codec.py > /work/codec.log 2>&1; python3 /code/scripts/prepare-abe-dev.py > /work/abe-preparation.log 2>&1; python3 -m collusion_handoff.readiness_cycle --preflight > /work/component-preflight.log 2>&1; python3 /code/scripts/run-abe-independent-fixtures.py --fixtures /review-v4/independent-fixtures.json --output /work/independent --adapter-commit "$ADAPTER_COMMIT" --execution-environment "caniculus non-root CPU Docker immutable vLLM0.32.0 image bd8a5d7a8774800c92d714c0c226b32c1863f929150f36efd610aebcd12a335d" > /work/independent.log 2>&1'
+ 'set -e; umask 077; test ! -e /control/STOP; python3 -m unittest discover -s /code/tests -v > /work/unittest.log 2>&1; python3 /code/scripts/probe-structured-output.py > /work/probe.log 2>&1; python3 /code/scripts/measure-memory-codec.py > /work/codec.log 2>&1; python3 /code/scripts/prepare-abe-dev.py > /work/abe-preparation.log 2>&1; python3 -m collusion_handoff.readiness_cycle --preflight > /work/component-preflight.log 2>&1; python3 /code/scripts/run-abe-independent-fixtures.py --fixtures /review-v4/independent-fixtures.json --output /work/independent --adapter-commit "$ADAPTER_COMMIT" --execution-environment "caniculus non-root CPU Docker immutable vLLM0.32.0 image bd8a5d7a8774800c92d714c0c226b32c1863f929150f36efd610aebcd12a335d" > /work/independent.log 2>&1; if test -d /fresh-fixtures; then python3 /code/scripts/probe-fresh-memory-wire.py > /work/fresh-wire.log 2>&1; fi'
 docker inspect "$CAN_NAME" > "$CAN_WORK/docker-inspect.json"
 printf '%s\n' "$CAN_WORK"
