@@ -65,7 +65,8 @@ if [ "$CAN_CUTOFF" -lt "$CAN_END" ]; then CAN_END=$CAN_CUTOFF; fi
 CAN_REMAINING=$((CAN_END-$(date +%s)))
 test "$CAN_REMAINING" -gt 0
 printf '%s\n' "$CAN_END" > "$CAN_ROOT/gpu-service-deadline.unix"
-jq -n --argjson used "$CAN_USED" --argjson end "$CAN_END" --argjson grace "$CAN_GRACE" '{previous_allocated_gpu_container_seconds:$used,phase_admission_deadline_unix:$end,shutdown_reserve_seconds:$grace,method:"Sum prior allocated container lifetimes rounded up; CPU gaps do not reset or spend service allowance"}' > "$CAN_ROOT/service-admission.json"
+jq -n --argjson used "$CAN_USED" --argjson deadline "$CAN_END" --argjson grace "$CAN_GRACE" '{previous_allocated_gpu_container_seconds:$used,phase_admission_deadline_unix:$deadline,shutdown_reserve_seconds:$grace,method:"Sum prior allocated container lifetimes rounded up; CPU gaps do not reset or spend service allowance"}' > "$CAN_ROOT/service-admission.json"
+sha256sum "$0" > "$CAN_ROOT/launcher-$CAN_PHASE.sha256"
 CAN_WORK="$CAN_ROOT/$CAN_PHASE"
 test ! -e "$CAN_WORK"
 mkdir -p "$CAN_WORK/home" "$CAN_WORK/tmp"
