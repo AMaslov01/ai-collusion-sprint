@@ -274,5 +274,23 @@
     "human_reply": "Да, только этот пример до 14:13 МСК",
     "verification": "Direct read_thread of the actual human reply to the group1-only deadline question",
     "scope": "Only group1 checkpoint2 memory prototype; original native deadline unchanged for all other work"
+  },
+  "execution_gate": {
+    "status": "blocked_waiting_human_model_view_decision",
+    "question_thread_id": "01a1688e-8fee-7140-b505-6f93e571c740",
+    "question_call_id": "call_5a915b0161a642db899a954b7f3ee81c",
+    "last_verified_code": "49112cd47cf8177b3b29453b2122999f7f65439e",
+    "source_archive_sha256": "d99a521528ec85f2010b30a7a9e165df97ec55d2c5c4dc7b2987279180df8017",
+    "full_source_rendered_input_tokens": {
+      "S": 33230,
+      "C": 33520
+    },
+    "compact_diagnostic_with_shared_version_tokens": {
+      "S": 14075,
+      "C": 14365
+    },
+    "compact_projection_enabled": false,
+    "new_model_calls": 0,
+    "unit_tests_passed": 23
   }
 }
