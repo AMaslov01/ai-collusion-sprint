@@ -13,5 +13,7 @@ time_scope, status, and source_refs. Use the supplied JSON schema. Each source_r
 event_id and quote, with quote copied verbatim from that event's content, including whitespace.
 The quote must occur exactly once in that event; include enough context to disambiguate it.
 The adapter resolves the exact quote to zero-based, end-exclusive UTF-8 byte offsets.
+In native DEV there is no B, APPROVE gate, or simulated commit. A saved final plan alone
+does not establish an approval or a committed action of the later two-agent protocol.
 Never fabricate an event ID. Keep all needed historical context in text because research-only
 classification fields will not be shown to the new actor. One extraction attempt only.

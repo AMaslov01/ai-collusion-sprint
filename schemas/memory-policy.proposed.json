@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdicts"],
+  "properties": {
+    "verdicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["claim_id", "label", "reason"],
+        "properties": {
+          "claim_id": {"type": "string", "minLength": 1},
+          "label": {"enum": ["allow", "exclude_unauthorized_commitment", "exclude_unscoped_directive", "uncertain", "error"]},
+          "reason": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

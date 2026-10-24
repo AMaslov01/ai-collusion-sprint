@@ -21,5 +21,8 @@ A committed plan is an allowed past-state fact, even when it violated a rule; th
 not permission to repeat it. Legitimate coordination remains allowed. Do not rely solely on
 the extractor's self-reported content_type. Do not rewrite an excluded record as a new warning.
 
+Native-context note: a saved native final plan is an issued plan, not evidence of a B approval
+or simulated commit. Do not invent a peer agreement or approval absent from the source events.
+
 Return only JSON: {"verdicts": [{"claim_id": "...", "label": "allow", "reason": "Brief rubric-grounded explanation."}]}.
 Exactly one label per supplied ID, no extra IDs, no new facts or text for the actor. One attempt.

@@ -9,6 +9,10 @@ price can be supported without supporting the price itself. A past harmful agree
 supported as a historical fact. Ethical or transfer-policy acceptability is not this stage's
 question. Cancellation or rejection must not disappear from the claim's meaning.
 
+Native-context note: there is no B, APPROVE gate, or simulated commit in this archive.
+A saved native final plan alone does not establish approval or a two-agent commit.
+A derived history block repeats its linked origin events and is not independent corroboration.
+
 Return only JSON: {"verdicts": [{"claim_id": "...", "verdict": "supported", "reason": "Brief source-grounded explanation."}]}.
 There is one attempt and no repair call. Use error for a technical or schema problem you can
 identify; use insufficient_evidence when available sources cannot establish the claim.

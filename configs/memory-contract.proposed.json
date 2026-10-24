@@ -4,27 +4,88 @@
   "approval_evidence": null,
   "source": {
     "checkpoint": "after_new_traveler_2",
-    "native_group_ids": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-    "include": ["initial_given_base_context", "issued_traveler_messages", "delivered_native_history_context", "visible_assistant_content", "tool_calls", "exact_delivered_tool_results", "final_plans"],
-    "exclude": ["system_role_text", "seed_inputs", "hidden_answers", "future_queries", "raw_reasoning_fields", "research_annotations", "continuations_after_checkpoint", "non_visible_peer_context"],
-    "deduplicate": "Repeated delivery of the same logical message in later requests is one event; distinct events with identical text remain distinct",
-    "event_schema": ["event_id", "role", "event_type", "group_id", "traveler_idx", "turn_idx", "order", "content", "source_version", "content_sha256"],
-    "source_order": "Actual creation/delivery order in saved IO and events",
-    "tool_call_text": "Canonical UTF-8 JSON of name and parsed arguments; exact displayed result stays a separate unmodified event"
+    "native_group_ids": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+    ],
+    "include": [
+      "initial_given_base_context",
+      "issued_traveler_messages",
+      "delivered_native_history_context",
+      "visible_assistant_content",
+      "tool_calls",
+      "exact_delivered_tool_results",
+      "final_plans"
+    ],
+    "exclude": [
+      "system_role_text",
+      "seed_inputs",
+      "hidden_answers",
+      "future_queries",
+      "raw_reasoning_fields",
+      "research_annotations",
+      "continuations_after_checkpoint",
+      "non_visible_peer_context"
+    ],
+    "deduplicate": "Use origin/logical event ID plus delivery references, never global text equality; distinct real events with equal text remain distinct",
+    "event_schema": [
+      "event_id",
+      "role",
+      "event_type",
+      "group_id",
+      "traveler_idx",
+      "turn_idx",
+      "order",
+      "content",
+      "source_version",
+      "content_sha256",
+      "origin_event_id",
+      "first_delivery",
+      "delivery_refs",
+      "derived_from"
+    ],
+    "source_order": "First actual delivery order from request/response timestamps and message index; retain origin creation metadata separately",
+    "tool_call_text": "Canonical UTF-8 JSON of name and parsed arguments; exact displayed result stays a separate unmodified event",
+    "history_context_evidence": "Keep an exact native-history block as derived context linked to originating issued queries/plans; it is not independent corroboration. Preserve a changed plan as a distinct version. If origin mapping cannot be proved, fail before builder calls instead of guessing."
   },
   "provenance": {
     "offset_unit": "UTF-8 bytes",
     "interval": "zero_based_start_inclusive_end_exclusive",
-    "raw_refs": ["event_id", "quote"],
+    "raw_refs": [
+      "event_id",
+      "quote"
+    ],
     "resolution": "Quote must occur exactly once verbatim; code derives offsets at valid UTF-8 boundaries, without whitespace normalization",
-    "canonical_refs": ["event_id", "start", "end", "source_hash"],
-    "actor_record_fields": ["text", "source_refs"],
+    "canonical_refs": [
+      "event_id",
+      "start",
+      "end",
+      "source_hash"
+    ],
+    "actor_record_fields": [
+      "text",
+      "source_refs"
+    ],
     "actor_raw_archive_dereference": false
   },
   "canonicalization": {
     "claim_ids": "Checkpoint ID plus original extraction index",
     "duplicates": "Drop only exact duplicate research records excluding generated IDs",
-    "order": ["first_source_event_order", "first_span_start", "original_extraction_index"],
+    "order": [
+      "first_source_event_order",
+      "first_span_start",
+      "original_extraction_index"
+    ],
     "semantic_rewrite_or_merge": false,
     "invalid_record_policy": "Fail C and dependent CV/CVP; preserve diagnostics; no silent record dropping or repair"
   },
@@ -32,25 +93,68 @@
     "repo": "Qwen/Qwen3.8-27B-FP8",
     "revision": "017b9c7af6b5689d5dd426a76e0bc077eb5ca20a",
     "runtime": "The approved vLLM image, TP1, context32768, max-num-seqs1, auto BF16 KV, same L40",
-    "generation": {"temperature": 0.0, "top_p": 1.0, "top_k": -1, "min_p": 0.0, "presence_penalty": 0.0, "repetition_penalty": 1.0, "seed": 42, "n": 1, "chat_template_kwargs": {"enable_thinking": false}},
+    "generation": {
+      "temperature": 0.0,
+      "top_p": 1.0,
+      "top_k": -1,
+      "min_p": 0.0,
+      "presence_penalty": 0.0,
+      "repetition_penalty": 1.0,
+      "seed": 42,
+      "n": 1,
+      "chat_template_kwargs": {
+        "enable_thinking": false
+      }
+    },
     "tools": [],
     "response_format": "Plain JSON completion validated by code; no guided-decoding mode, repair call, or new lookup"
   },
   "stages": {
-    "S": {"prompt": "prompts/memory/summary.txt", "max_calls_per_checkpoint": 1, "max_output_tokens": 4096},
-    "C": {"prompt": "prompts/memory/extract.txt", "schema": "schemas/memory-extraction.proposed.json", "max_calls_per_checkpoint": 1, "max_output_tokens": 8192},
-    "V": {"prompt": "prompts/memory/verify.txt", "implementation": "One source-only LLM support table for the actually packed C", "max_calls_per_checkpoint": 1, "max_output_tokens": 8192, "retain": "supported"},
-    "P": {"prompt": "prompts/memory/policy.txt", "implementation": "One source-only LLM transfer table for CV, with the closed rubric in the prompt", "max_calls_per_checkpoint": 1, "max_output_tokens": 8192, "retain": "allow"}
+    "S": {
+      "prompt": "prompts/memory/summary.txt",
+      "max_calls_per_checkpoint": 1,
+      "max_output_tokens": 4096,
+      "schema": "schemas/memory-summary.proposed.json"
+    },
+    "C": {
+      "prompt": "prompts/memory/extract.txt",
+      "schema": "schemas/memory-extraction.proposed.json",
+      "max_calls_per_checkpoint": 1,
+      "max_output_tokens": 8192
+    },
+    "V": {
+      "prompt": "prompts/memory/verify.txt",
+      "implementation": "One source-only LLM support table for the actually packed C",
+      "max_calls_per_checkpoint": 1,
+      "max_output_tokens": 8192,
+      "retain": "supported",
+      "schema": "schemas/memory-verification.proposed.json"
+    },
+    "P": {
+      "prompt": "prompts/memory/policy.txt",
+      "implementation": "One source-only LLM transfer table for CV, with the closed rubric in the prompt",
+      "max_calls_per_checkpoint": 1,
+      "max_output_tokens": 8192,
+      "retain": "allow",
+      "schema": "schemas/memory-policy.proposed.json"
+    }
   },
   "limits": {
     "max_total_builder_calls": 48,
     "request_timeout_seconds": 900,
     "attempts_per_call": 1,
     "concurrency": 1,
-    "source_input_plus_output_tokens_per_checkpoint": 131072,
     "max_input_tokens": "32768 minus the stage output reserve; full rendered request, with no truncation",
     "native_block_deadline_utc": "2026-10-24T06:09:18Z",
-    "package_deadline_utc": "2026-10-24T11:13:16Z"
+    "package_deadline_utc": "2026-10-24T11:13:16Z",
+    "total_rendered_input_plus_output_tokens_per_checkpoint": 131072,
+    "input_caps": {
+      "S": 28672,
+      "C": 24576,
+      "V": 24576,
+      "P": 24576
+    },
+    "timeout_rule": "One-attempt wall timeout is min(900 seconds, remaining native deadline, remaining package deadline); deadline expiry stops with preserved unknown-spend diagnostics, never resets or retries"
   },
   "packing": {
     "memory_content_tokens": 2048,
@@ -62,15 +166,92 @@
     "R": "Empty private archive",
     "archive_wrapper": "[PRIVATE ARCHIVE]\n{content}\n[/PRIVATE ARCHIVE]",
     "wrapper_and_active_instruction_parity": true,
-    "zero_valid_S_or_C": "package_build_failure, never a successful empty archive"
+    "zero_valid_S_or_C": "package_build_failure, never a successful empty archive",
+    "content_serializer": {
+      "json_sort_keys": true,
+      "json_ensure_ascii": false,
+      "json_separators": [
+        ",",
+        ":"
+      ],
+      "json_allow_nan": false,
+      "encoding": "UTF-8",
+      "trailing_newline": false,
+      "claim_record_fields": [
+        "text",
+        "source_refs"
+      ],
+      "claim_research_fields_and_generated_ids_in_actor_content": false,
+      "empty_claim_array": "[]",
+      "R_content": "",
+      "S_sentence_join": "One ASCII space between returned whole sentences",
+      "content_tokenization": "Pinned tokenizer encoding of the exact transmitted content string, add_special_tokens=false; count all JSON keys, refs, separators, and escaping",
+      "wrapper_tokenization": "Wrapper excluded from content budget but included with all other material in the full rendered request context check"
+    },
+    "diagnostics": [
+      "raw_extraction_coverage",
+      "actually_delivered_coverage",
+      "excluded_by_budget_claim_ids_and_source_positions",
+      "per_stage_process_failure_and_empty_after_deletion_distinction"
+    ]
   },
   "human_audit": {
     "selection": "All 12 native checkpoints, fixed before observing memory quality",
     "independent_annotators": 2,
     "order": "Source units independently first, then extraction matching and V/P labels, then preserved adjudication",
-    "metrics": ["faithfulness", "source_unit_coverage", "context_preservation", "V_false_accept_reject_uncertainty_error", "P_harmful_pass_benign_drop_uncertainty_error", "units_delivered_under_budget"],
+    "metrics": [
+      "faithfulness",
+      "source_unit_coverage",
+      "context_preservation",
+      "V_false_accept_reject_uncertainty_error",
+      "P_harmful_pass_benign_drop_uncertainty_error",
+      "units_delivered_under_budget"
+    ],
     "substitution_with_LLM_gold": false,
-    "native_verified_gate": "Human review of group1 before groups2-3; their review before expanding to the remaining approved groups",
-    "human_corrected_or_matched_removal_diagnostics": "not_included_without_separate_approval"
-  }
+    "native_verified_gate": "Before groups2-3: two preserved independent group1 source-first forms, then extraction/V/P review and adjudication. The same review of groups2-3 precedes the remaining groups. All12 required forms/adjudications are needed for verified native; otherwise needs_human_annotation.",
+    "human_corrected_or_matched_removal_diagnostics": "not_included_without_separate_approval",
+    "zero_harmful_denominator": "Report P_harmful_pass as N/A with denominator0; never as 0 percent errors"
+  },
+  "validation": {
+    "json_parser": "Reject duplicate object keys, NaN/Infinity, markdown fences, trailing text, and non-JSON content",
+    "schema": "Closed fields and enums per stage schema",
+    "verdict_ids": "V/P must return exactly the requested claim_id set, each once; join by ID, never by position",
+    "malformed_S_or_C": "Whole affected package build failure; C failure propagates to CV/CVP",
+    "malformed_V": "Whole CV/CVP package build failure",
+    "malformed_P": "Whole CVP package build failure",
+    "valid_per_row_error": "Keep the closed-schema error verdict, drop it from the retained package, publish process-failure flags and error counts; never relabel as supported/allow",
+    "repair_or_quarantine": "None; changing whole-C failure from one bad provenance quote requires explicit user decision"
+  },
+  "stage_input_envelope": {
+    "schema_version": "memory_stage_input_v1_proposed",
+    "system_message": "Only the current stage prompt file",
+    "user_message": "One canonical JSON data object; never replay archived role messages as live instructions",
+    "data_fields": [
+      "stage",
+      "checkpoint_id",
+      "archive_id",
+      "source_policy_id",
+      "rubric_id",
+      "source_events",
+      "candidates",
+      "response_schema"
+    ],
+    "S_C_candidates": [],
+    "V_candidates": "Exactly the actually packed frozen C research records",
+    "P_candidates": "Exactly CV research records",
+    "source_events": "The same permitted immutable archive for all stages",
+    "rubric_id": "native_transfer_policy_v1_proposed for P, otherwise null",
+    "lookup_tools": []
+  },
+  "technical_review": {
+    "thread_id": "01a1688e-8fee-7140-b505-6f93e571c740",
+    "message_id": "msg_088f10c2469c4268016adbfca5b3ec8191a7af06363c0e043c",
+    "status": "recommendations_only_not_human_approval",
+    "applied_to_proposal_only": true
+  },
+  "remaining_human_decisions": [
+    "Source/offset/dedup/serializer/envelope/schemas and strict whole-C failure",
+    "Separate builder sampler, content/output/call budgets and deadlines",
+    "All12 independent human audits and staged readiness gates"
+  ]
 }
