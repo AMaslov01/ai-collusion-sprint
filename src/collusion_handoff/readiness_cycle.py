@@ -85,6 +85,18 @@ def verify_final_DEV_freeze(identity):
     return freeze
 
 
+def verify_source_first_locks(sources, group_ids):
+    locks = read_json(REVIEW / "source-first-reference-locks.json")
+    require(locks["origin"] == "AI_source_only_not_human_gold", "Reference origin must be explicit")
+    for number in group_ids:
+        item = locks["groups"][str(number)]
+        require(item["source_file_sha256"] == sources[str(number)]["file_sha256"], "Reference is bound to another source")
+        reference = REVIEW / item["reference_file"]
+        require(reference.resolve().is_relative_to(REVIEW.resolve()) and reference.is_file(), "Source-first reference artifact missing")
+        require(sha256(reference.read_bytes()).hexdigest() == item["reference_sha256"], "Source-first reference lock changed")
+    return locks
+
+
 def verify_dispatch(identity):
     dispatch_path = REVIEW / ("dispatch-" + identity["phase"] + ".json")
     receipt = read_json(dispatch_path)
@@ -193,11 +205,16 @@ def preflight():
                              add_generation_prompt=True, enable_thinking=False, return_dict=False)
                 require(len(token_ids) + body["max_tokens"] <= 32768, "Actual A/B source full input overflow")
                 probes[f"checkpoint-group-{number}/{stage}"] = body
+        if config["run_id"].startswith("readiness-cycle-v5"):
+            source = read_json(known_sources()[1])
+            for stage in ("S", "C"):
+                probes[f"known-regression-group-1/{stage}"] = payload(stage, source, [], config, assets)
         atomic_json(WORK / "phase-manifest.json", identity)
         atomic_json(WORK / "assets.json", assets)
         atomic_json(WORK / "wire-probes.json", probes)
         atomic_json(WORK / "preflight.json", {"status": "passed_no_model_calls", "identity": identity, "sources": sources,
-                    "maximum_calls_this_component_phase": 8, "new_model_calls": 0, "main_started": False})
+                    "maximum_calls_this_component_phase": 12 if config["run_id"].startswith("readiness-cycle-v5") else 8,
+                    "new_model_calls": 0, "main_started": False})
         return
     tokens = AutoTokenizer.from_pretrained("/model", local_files_only=True)
     definitions = read_json(CODE / "fixtures/memory-semantic-v3.json")["fixtures"]
@@ -334,8 +351,7 @@ def run_client():
         if identity["phase"] == "validation-continuations-v1":
             verify_final_DEV_freeze(identity)
             reviewed_sources = read_json(Path("/preflight/preflight.json"))["sources"]
-            reference_locks = read_json(REVIEW / "source-first-reference-locks.json")
-            require(reference_locks["origin"] == "AI_source_only_not_human_gold", "Reference origin must remain explicit")
+            reference_locks = verify_source_first_locks(reviewed_sources, [6, 7])
             for number in (6, 7):
                 source_path = ROOT / f"validation-prefix-v1/prefix/group-{number}/source.json"
                 require(sha256(source_path.read_bytes()).hexdigest() == reviewed_sources[str(number)]["file_sha256"], "Reviewed fresh source changed")
@@ -352,6 +368,12 @@ def run_client():
             return
         if identity["phase"] == "development-checkpoint-memory-v1":
             reviewed = read_json(Path("/preflight/preflight.json"))["sources"]
+            verify_source_first_locks(reviewed, [4, 5])
+            if config["run_id"].startswith("readiness-cycle-v5"):
+                key = "known-regression-group-1"
+                source = read_json(known_sources()[1])
+                jobs[key] = memory_job(source, WORK / "memory" / key, identity["phase"] + "/" + key, config, assets, budget,
+                                      lambda text: len(tokens.encode(text, add_special_tokens=False)), allocation="known_regression")
             for number in (4, 5):
                 source_path = ROOT / config["selection"].get("developmental_prefix_phase", "development-prefix-v1") / f"prefix/group-{number}/source.json"
                 source = read_json(source_path)
