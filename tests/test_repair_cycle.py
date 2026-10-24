@@ -166,7 +166,8 @@ class IndependentFixtureComponentTests(unittest.TestCase):
 
 class GlobalBudgetTests(unittest.TestCase):
     def config(self):
-        return {"limits": {"absolute_cutoff_utc": "2026-10-24T15:00:00Z", "gpu_service_wall_seconds": 7200,
+        cutoff = datetime.fromtimestamp(time.time() + 3600, timezone.utc).isoformat()
+        return {"limits": {"absolute_cutoff_utc": cutoff, "gpu_service_wall_seconds": 7200,
                            "max_new_model_attempts": 2, "max_input_output_tokens": 10000}, "allocations": {"test": 1}}
 
     def payload(self):
