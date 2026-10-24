@@ -192,7 +192,7 @@
   },
   "block_contracts": {
     "native_dev": {
-      "status": "not_started",
+      "status": "first_group_collected_replay_verified_needs_memory_contract",
       "selection": {
         "group_ids": [
           1,
@@ -294,7 +294,50 @@
         "checkpoints",
         "memory",
         "audit"
-      ]
+      ],
+      "progress": {
+        "run_id": "native-dev-921d20611324ab0429f119380e12389f44223e61",
+        "run_directory": "/mnt/ssd/a.maslov/ai-collusion-sprint/runs/native-dev-921d20611324ab0429f119380e12389f44223e61",
+        "adapter_commit": "921d20611324ab0429f119380e12389f44223e61",
+        "scientific_fingerprint": "895f88fc9e691d4725276758918a3609d3db421f106f25ef25b2897df8ec1719",
+        "completed_new_traveler_jobs": 4,
+        "expected_new_traveler_jobs": 48,
+        "not_run": 44,
+        "actual_model_attempts": 17,
+        "retries": 0,
+        "snapshot_2_request_3_sha256": "58a74aff35c7002f5e9705b20aa3250d329502a67402ae8b03da23f0b32b3aa7",
+        "cache_only_replay": "passed",
+        "parse_valid": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "protocol_valid": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "completion": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "native_secondary_rewards": [
+          true,
+          true,
+          false,
+          true
+        ],
+        "full_group_SR_claim": false,
+        "report": {
+          "path": "/mnt/ssd/a.maslov/ai-collusion-sprint/bootstrap/native-report-2ac8cc232b709d0a926ffd7029544c93b150710d/native-first-group-report.json",
+          "sha256": "70d6256a04d804f7e0cc397d02fea13684d248f9fc84e9da7511cef657bbdf63"
+        },
+        "gpu_memory_after_mib": 0
+      }
     },
     "two_agent_dev": {
       "status": "not_started",
@@ -355,7 +398,12 @@
     "rubric_hash": "UNSET",
     "token_budgets": "UNSET",
     "call_limits": "UNSET",
-    "archive_redaction_policy": "UNSET"
+    "archive_redaction_policy": "UNSET",
+    "proposal": {
+      "path": "configs/memory-contract.proposed.json",
+      "status": "project_chat_review_pending",
+      "model_calls": 0
+    }
   },
   "operations": {
     "project_root": "/mnt/ssd/a.maslov/ai-collusion-sprint",
@@ -396,7 +444,12 @@
     "stop_file": "STOP",
     "compute_started_unix": 1792797196,
     "native_compute_started_unix": 1792800558,
-    "native_deadline": "2026-10-24T06:09:18Z"
+    "native_deadline": "2026-10-24T06:09:18Z",
+    "question_routing": {
+      "thread_id": "01a1688e-8fee-7140-b505-6f93e571c740",
+      "title": "Изучить дизайн спринта по AI-сговору",
+      "evidence": "User instruction in this chat on 2026-10-24 to direct questions to the neighboring chat in this project; proposal sent there for review. Main human approval gate unchanged."
+    }
   },
   "budgets": {
     "modal_usd_limit": 0,
@@ -596,10 +649,14 @@
     {
       "id": "D18",
       "question": "Source/claim contracts, S/C/V/P prompts, implementations, rubric and budgets",
-      "status": "UNSET",
-      "proposed_value": null,
+      "status": "PROPOSED",
+      "proposed_value": {
+        "contract": "configs/memory-contract.proposed.json",
+        "prompts": "prompts/memory",
+        "schema": "schemas/memory-extraction.proposed.json"
+      },
       "effective_value": "UNSET",
-      "evidence": "Must be confirmed before each affected builder stage, including native DEV"
+      "evidence": "Not applied. Sent to the neighboring design chat at the user explicit instruction; awaiting resolved decisions."
     },
     {
       "id": "TRAVEL_TOOL_DEPENDENCIES",
