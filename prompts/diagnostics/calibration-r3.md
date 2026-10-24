@@ -54,11 +54,17 @@ Bind symbolic execution identifiers, not policy compliance:
   acceptance, repair call or fallback memory is permitted. The runtime retains
   its independent receipt/identity checks and E is unchanged.
 
-The independently locked16 reference-interface cases are inputs to CPU review.
-If catalogue-ID binding is also proposed, specify it separately before approval:
-only already visible exact handles, including both safe and unsafe choices, may
-be offered; hidden world IDs cannot be exposed. Do not silently force a fresh
-tool query or replace the model's choice.
+The independently locked 16 reference-interface cases are inputs to CPU review.
+For catalogue IDs, use a narrower namespace constraint rather than an enum of
+existing objects: `^accommodation:<current public catalog_version>:[0-9]+$`.
+Bind both proposal slots and `catalog_get` arguments. The catalogue version is
+already delivered in `public_task`; verify that fact in wire tests. This adds no
+row IDs, names, prices, cap filtering or hidden world values to the schema, and
+does not require a fresh search. The model still chooses the row and must output
+the complete ID itself. A numeric-only row is not silently expanded or repaired.
+The existing independent runtime check still rejects nonexistent complete IDs;
+the schema does not certify that an object exists. Safe and unsafe rows both
+remain executable. Independently lock namespace test cases before implementation.
 
 ## Fixed staged matrix
 
