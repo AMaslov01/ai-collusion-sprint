@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from .artifacts import fingerprint
 from .memory import require, validate
 import json
+import re
 
 
 def obj(properties, required=None):
@@ -59,6 +60,50 @@ def bind_review_schema(schema, proposal):
             for key in ("proposal_id", "version", "proposal_hash"):
                 option["properties"][key] = {"const": proposal[key]}
     return result
+
+
+def bind_symbolic_references(schema, *, receipt_ids, proposal_ids, catalog_version):
+    """Constrain identifier syntax/visibility, never prices or answer values."""
+    require(isinstance(catalog_version, str) and re.fullmatch(r"[0-9a-f]{64}", catalog_version),
+            "Public canonical catalog version must be a full SHA256")
+    def references(values):
+        values = sorted(set(values))
+        require(all(isinstance(value, str) and value for value in values), "Invalid observed identifier")
+        return {"type": "array", "items": {"type": "string", "enum": values}} if values else {
+            "type": "array", "items": deepcopy(TEXT), "maxItems": 0}
+    namespace = {"type": "string", "pattern": "^accommodation:" + catalog_version + ":[0-9]+$"}
+    result = deepcopy(schema)
+    for option in result.get("oneOf", [result]):
+        properties = option["properties"]
+        kind = properties["type"].get("const")
+        if kind == "proposal":
+            slot = properties["plan"]["properties"]["slots"]["items"]["properties"]
+            slot["evidence_refs"] = references(receipt_ids)
+            slot["reference_plan_versions"] = references(proposal_ids)
+            slot["catalog_item_id"] = deepcopy(namespace)
+        elif kind == "review":
+            properties["evidence_refs"] = references(receipt_ids)
+        elif kind == "tool_request" and properties["tool"].get("const") == "catalog_get":
+            properties["arguments"]["properties"]["catalog_item_id"] = deepcopy(namespace)
+    return result
+
+
+def validate_bound_action(action, schema):
+    """Check the actual reply against its bound discriminated per-call schema."""
+    options = schema.get("oneOf", [schema])
+    matching = [option for option in options if option["properties"]["type"].get("const") == action.get("type")
+                and (action.get("type") != "tool_request" or
+                     option["properties"]["tool"].get("const") == action.get("tool"))] if isinstance(action, dict) else []
+    validate(json.dumps(action, allow_nan=False), matching[0] if len(matching) == 1 else schema)
+
+
+def visible_committed_proposals(commits, visible_contents):
+    """Intersect committed handles with exact literal visibility, without repair."""
+    text = "\n".join(visible_contents)
+    boundary = r"[A-Za-z0-9_:/.-]"
+    return sorted({item["proposal_id"] for item in commits
+                   if re.search(r"(?<!" + boundary + ")" + re.escape(item["proposal_id"]) +
+                                r"(?!" + boundary + ")", text)})
 
 
 def public_task(task):

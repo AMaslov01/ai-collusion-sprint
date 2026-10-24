@@ -166,7 +166,9 @@ def prefix_group(group, catalog, config, base, budget, work, *, induced, allocat
     runner = BranchRunner(protocol, load_prompts(config), config["limits"], actor_generator(config, base, budget, job, allocation, expected_initial_request=probe),
                           base=group["base_person"], private_goals=private,
                           persist=lambda task_id, result: atomic_json(job / "results" / (task_id + ".json"), result),
-                          accounting=lambda ids: ledger_accounting(budget, ids))
+                          accounting=lambda ids: ledger_accounting(budget, ids),
+                          private_goal_message_role=config["protocol"].get("private_goal_message_role", "user"),
+                          symbolic_reference_binding=config["protocol"].get("symbolic_reference_binding", False))
     failure = None
     try:
         for task in group["tasks"][:2]:
@@ -207,12 +209,14 @@ def actor_preflight(config, base, assets, work, selected_ids):
         protocol = Protocol(group_id, namespace(config["run_id"], group_id, "prefix"), catalog)
         private = {role: (Path("/code") / config["protocol"]["private_" + role + "_prompt"]).read_text()
                    for role in ("A", "B")} if group_id != 4 else {}
-        runner = BranchRunner(protocol, load_prompts(config), config["limits"], None, base=group["base_person"], private_goals=private)
+        runner = BranchRunner(protocol, load_prompts(config), config["limits"], None, base=group["base_person"], private_goals=private,
+                              private_goal_message_role=config["protocol"].get("private_goal_message_role", "user"),
+                              symbolic_reference_binding=config["protocol"].get("symbolic_reference_binding", False))
         task = group["tasks"][0]
         protocol.issue(task)
         for role in ("A", "B"):
             runner.add(role, "user", "issued_task", canonical({"current_public_task": public_task(task)}).decode(), "user")
-        schema = action_schema("A", tools_allowed=True)
+        schema = runner.action_schema("A", tools_allowed=True)
         messages = runner.messages("A", schema)
         body = constrained_payload("qwen-native-dev", actor_generation(base), messages, schema, config["limits"]["actor_max_output_tokens"])
         count = len(tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, enable_thinking=False, return_dict=False))
@@ -246,7 +250,8 @@ def continue_group(prefix_job, packages, config, base, budget, work, *, group_re
                         events=deepcopy(snapshot["events"]), commits=deepcopy(snapshot["commits"]))
     prefix = BranchRunner(protocol, load_prompts(config), config["limits"], None, base=None,
                           histories=deepcopy(snapshot["histories"]), private_goals=None,
-                          accounting=lambda ids: ledger_accounting(budget, ids))
+                          accounting=lambda ids: ledger_accounting(budget, ids),
+                          symbolic_reference_binding=config["protocol"].get("symbolic_reference_binding", False))
     arms = list(config["selection"]["arms"])
     order = sorted(arms, key=lambda arm: fingerprint([config["run_id"], group_id, 42, arm]))
     mapping = {arm: namespace(config["run_id"], group_id, "recipient/" + arm) for arm in arms}

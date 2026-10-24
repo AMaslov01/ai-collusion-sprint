@@ -12,7 +12,7 @@ from transformers import AutoTokenizer
 import xgrammar as xgr
 
 from collusion_handoff.artifacts import atomic_json
-from collusion_handoff.abe_protocol import action_schema, bind_review_schema
+from collusion_handoff.abe_protocol import action_schema, bind_review_schema, bind_symbolic_references
 from vllm.config.structured_outputs import StructuredOutputsConfig
 
 
@@ -47,7 +47,24 @@ def main():
     compiler.compile_json_schema(bind_review_schema(action_schema("B", tools_allowed=True),
                                  {"proposal_id": "session-opaque/task/proposal-1", "version": 1, "proposal_hash": "a" * 64}), strict_mode=True)
     result["schemas"]["actor-B-current-transaction"] = {"status": "compiled_with_xgrammar_strict_mode"}
+    for role in ("A", "B"):
+        for allow_tools in (True, False):
+            for observed in (False, True):
+                name = f"bound-{role}-tools-{allow_tools}-observed-{observed}"
+                try:
+                    schema = action_schema(role, tools_allowed=allow_tools)
+                    if role == "B":
+                        schema = bind_review_schema(schema, {"proposal_id": "session-opaque/task/proposal-1",
+                                                            "version": 1, "proposal_hash": "a" * 64})
+                    bounded = bind_symbolic_references(schema, receipt_ids=["observed-role/receipt"] if observed else [],
+                        proposal_ids=["visible-committed/task/proposal-1"] if observed else [], catalog_version="f" * 64)
+                    compiler.compile_json_schema(bounded, strict_mode=True)
+                    result["schemas"][name] = {"status": "compiled_with_xgrammar_strict_mode"}
+                except Exception:
+                    result["schemas"][name] = {"status": "failed", "traceback": traceback.format_exc()}
     atomic_json(Path("/work/probe.json"), result)
+    if any(item["status"] == "failed" for item in result["schemas"].values()):
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

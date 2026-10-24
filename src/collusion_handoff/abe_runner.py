@@ -8,7 +8,8 @@ import time
 from jsonschema import ValidationError
 
 from .abe_evaluation import evaluate_opportunity
-from .abe_protocol import Protocol, action_schema, bind_review_schema, public_task, validate_action
+from .abe_protocol import (Protocol, action_schema, bind_review_schema, bind_symbolic_references,
+                           public_task, validate_action, validate_bound_action, visible_committed_proposals)
 from .abe_tools import execute_tool
 from .abe_visibility import historical_messages, permitted_history
 from .artifacts import canonical, fingerprint
@@ -33,12 +34,17 @@ class TaskLimitExceeded(MemoryError):
 
 
 class BranchRunner:
-    def __init__(self, protocol, prompts, limits, generate, *, base, histories=None, archive=None, private_goals=None, persist=None, accounting=None):
+    def __init__(self, protocol, prompts, limits, generate, *, base, histories=None, archive=None, private_goals=None, persist=None, accounting=None,
+                 private_goal_message_role="user", symbolic_reference_binding=False):
         self.protocol, self.prompts, self.limits = protocol, prompts, limits
         self.generate, self.persist = generate, persist
         self.accounting = accounting
         self.histories = deepcopy(histories) if histories is not None else {"A": [], "B": []}
         self.archive, self.private_goals = archive, private_goals or {}
+        require(private_goal_message_role in {"user", "system"}, "Unsupported private-goal message role")
+        require(type(symbolic_reference_binding) is bool, "Reference binding must be an explicit boolean")
+        self.private_goal_message_role = private_goal_message_role
+        self.symbolic_reference_binding = symbolic_reference_binding
         self.receipts = {role: set() for role in ("A", "B")}
         for role in ("A", "B"):
             for record in self.histories[role]:
@@ -66,12 +72,25 @@ class BranchRunner:
     def messages(self, role, schema):
         result = [{"role": "system", "content": self.prompts[role]}]
         if role in self.private_goals:
-            result.append({"role": "user", "content": self.private_goals[role]})
+            result.append({"role": self.private_goal_message_role, "content": self.private_goals[role]})
         if role == "A" and self.archive is not None:
             result.append({"role": "user", "content": "[PRIVATE ARCHIVE]\n" + self.archive + "\n[/PRIVATE ARCHIVE]"})
         result.extend(historical_messages(self.histories[role]))
         result.append({"role": "user", "content": "Return one action under this response schema: " + canonical(schema).decode()})
         return result
+
+    def action_schema(self, role, *, tools_allowed):
+        schema = action_schema(role, tools_allowed=tools_allowed)
+        if role == "B":
+            schema = bind_review_schema(schema, self.protocol.proposal)
+        if self.symbolic_reference_binding:
+            contents = [record["content"] for record in permitted_history(self.histories[role])]
+            if role == "A" and self.archive is not None:
+                contents.append(self.archive)
+            schema = bind_symbolic_references(schema, receipt_ids=self.receipts[role],
+                proposal_ids=visible_committed_proposals(self.protocol.commits, contents),
+                catalog_version=self.protocol.task["catalog_version"])
+        return schema
 
     def message_provenance(self, role, messages):
         origins = [{"event_type": "current_nominal_role", "origin_event_id": "nominal-role/" + role}]
@@ -105,9 +124,7 @@ class BranchRunner:
                         raise TaskLimitExceeded("Task model-call budget exhausted")
                     if time.time() >= deadline:
                         raise AdmissionFailure("Task wall-time exhausted", kind="timeout")
-                    schema = action_schema(role, tools_allowed=used < allowance)
-                    if role == "B":
-                        schema = bind_review_schema(schema, self.protocol.proposal)
+                    schema = self.action_schema(role, tools_allowed=used < allowance)
                     messages = self.messages(role, schema)
                     logical_id = f"{self.protocol.branch_id}/{task['task_id']}/{role}/cycle-{self.protocol.cycle}/call-{calls+1}"
                     logical_ids.append(logical_id)
@@ -123,6 +140,8 @@ class BranchRunner:
                     require(completion["output_tokens"] <= self.limits["actor_max_output_tokens"] and
                             tokens <= self.limits["task_max_input_output_tokens"], "Actual task token budget exceeded")
                     action = strict_json(completion["text"])
+                    if self.symbolic_reference_binding:
+                        validate_bound_action(action, schema)
                     validate_action(action, role, tools_allowed=used < allowance)
                     self.add(role, "assistant", "assistant_action", completion["text"], role)
                     if action["type"] == "tool_request":
@@ -160,6 +179,22 @@ class BranchRunner:
                 fatal = error
         except (MemoryError, ValidationError, json.JSONDecodeError, ValueError) as error:
             failure = {"type": type(error).__name__, "message": str(error)}
+            if self.symbolic_reference_binding:
+                if isinstance(error, ValidationError):
+                    path = [str(part) for part in error.absolute_path]
+                    if "evidence_refs" in path:
+                        kind = "bound_tool_receipt_reference"
+                    elif "reference_plan_versions" in path:
+                        kind = "bound_plan_reference_visibility"
+                    elif "catalog_item_id" in path and error.validator == "pattern":
+                        kind = "catalog_namespace_format"
+                    else:
+                        kind = "bound_action_schema"
+                    failure.update({"kind": kind, "field_path": path, "validator": error.validator})
+                else:
+                    failure["kind"] = {"Unknown canonical catalog ID": "canonical_grounding_failure",
+                                       "Unobserved tool receipt citation": "unobserved_tool_receipt",
+                                       "Unknown prior plan version": "unknown_committed_plan"}.get(str(error), "protocol_or_generation_failure")
             if self.protocol.terminal is None:
                 self.protocol.finish("budget_exhausted" if isinstance(error, TaskLimitExceeded) else "protocol_invalid")
         evaluation = evaluate_opportunity(task, self.protocol.catalog, self.protocol.events, ledger_complete=True)
@@ -196,4 +231,5 @@ class BranchRunner:
         a_base = [record for record in permitted_history(self.histories["A"]) if record["event_type"] in {"base_query", "provided_base_plan"}]
         return BranchRunner(protocol, self.prompts, self.limits, generate, base=None,
                             histories={"A": a_base, "B": b_history}, archive=archive,
-                            private_goals=None, persist=persist, accounting=self.accounting)
+                            private_goals=None, persist=persist, accounting=self.accounting,
+                            symbolic_reference_binding=self.symbolic_reference_binding)

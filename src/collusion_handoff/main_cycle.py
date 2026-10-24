@@ -248,7 +248,7 @@ def verify_annotations(review, manifest, groups, prefixes):
 
 
 def continuation_group(prefix_job, packages, manifest, config, base, budget, work, *, group_registry, catalog,
-                       generator_factory=None):
+                       generator_factory=None, actor_allocation="continuation_actors"):
     """Six isolated arms, identical initial B/world, explicit missing results."""
     from .abe_cycle import actor_generator, ledger_accounting, load_prompts, namespace
     from .abe_evaluation import evaluate_opportunity
@@ -263,7 +263,8 @@ def continuation_group(prefix_job, packages, manifest, config, base, budget, wor
                         events=deepcopy(snapshot["events"]), commits=deepcopy(snapshot["commits"]))
     prefix = BranchRunner(protocol, load_prompts(config), config["limits"], None, base=None,
                           histories=deepcopy(snapshot["histories"]), private_goals=None,
-                          accounting=lambda ids: ledger_accounting(budget, ids))
+                          accounting=lambda ids: ledger_accounting(budget, ids),
+                          symbolic_reference_binding=config["protocol"].get("symbolic_reference_binding", False))
     arms = manifest["sample"]["arms"]
     order = sorted(arms, key=lambda arm: fingerprint([config["run_id"], number, base["generation"]["seed"], arm]))
     mapping = {arm: namespace(config["run_id"], number, "recipient/" + arm) for arm in arms}
@@ -283,7 +284,7 @@ def continuation_group(prefix_job, packages, manifest, config, base, budget, wor
                 atomic_json(job / "status.json", {"status": "not_run_missing_assigned_memory", "arm_admin_only": arm})
                 continue
             runner = prefix.fork(mapping[arm], packages[arm]["content"],
-                                 generator_factory(config, base, budget, job, "continuation_actors"),
+                                 generator_factory(config, base, budget, job, actor_allocation),
                                  emit=lambda event, path=job / "events.jsonl": append_event(path, event),
                                  persist=lambda task_id, result, path=job: atomic_json(path / "results" / (task_id + ".json"), result))
             runners[arm] = runner
@@ -357,12 +358,14 @@ def preflight(manifest, config, base, assets, phase, *, code, review, root, work
             for number, group in groups.items():
                 protocol = Protocol(number, namespace(config["run_id"], number, "prefix"), catalog)
                 private = {role: (code / config["protocol"]["private_" + role + "_prompt"]).read_text() for role in ("A", "B")} if manifest["sample"]["prefix_condition_by_group"][str(number)] == "private_goal_induction" else {}
-                runner = BranchRunner(protocol, load_prompts(config), config["limits"], None, base=group["base_person"], private_goals=private)
+                runner = BranchRunner(protocol, load_prompts(config), config["limits"], None, base=group["base_person"], private_goals=private,
+                    private_goal_message_role=config["protocol"].get("private_goal_message_role", "user"),
+                    symbolic_reference_binding=config["protocol"].get("symbolic_reference_binding", False))
                 task = group["tasks"][0]
                 protocol.issue(task)
                 for role in ("A", "B"):
                     runner.add(role, "user", "issued_task", canonical({"current_public_task": public_task(task)}).decode(), "user")
-                schema = action_schema("A", tools_allowed=True)
+                schema = runner.action_schema("A", tools_allowed=True)
                 body = constrained_payload("qwen-native-dev", actor_generation(base), runner.messages("A", schema), schema, config["limits"]["actor_max_output_tokens"])
                 probes[str(number)] = {"request": body}
             atomic_json(work / "actor-wire-probes.json", probes)
