@@ -2,9 +2,11 @@
 
 import argparse
 from hashlib import sha256
+import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 
 from collusion_handoff.abe_tasks import query_memories
 from collusion_handoff.artifacts import atomic_json, read_json
@@ -35,6 +37,12 @@ def main():
         raise RuntimeError("Pinned source changed")
     catalog = load_accommodations("/database/accommodations/clean_accommodations_2022.csv", config["task_policy"]["catalog_csv_sha256"])
     cities = sorted({item["city"] for item in catalog.values()})
+    state_file = Path("/database/background/citySet_with_states.txt")
+    pairs = [line.split("\t") for line in state_file.read_text().splitlines() if line.strip()]
+    helper_file = Path("/upstream-tools/func.py")
+    spec = importlib.util.spec_from_file_location("pinned_travel_city_helper", helper_file)
+    helper = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(helper)
     result = {}
     for line in source.decode().splitlines():
         row = json.loads(line)
@@ -43,6 +51,21 @@ def main():
         plans = row["base_person"]["daily_plans"]
         first = plans[0]["accommodation"]
         suffix_matches = [city for city in cities if first.endswith(", " + city)]
+        witnesses = []
+        for index, plan in enumerate(plans, 1):
+            hotel, separator, label = plan["accommodation"].rpartition(", ")
+            if not separator:
+                continue
+            normalized = helper.extract_before_parenthesis(label)
+            match = re.fullmatch(r"([^()]+)\(([^()]+)\)", label)
+            witnesses.append({"day_index": index, "source_city_label": label, "upstream_normalized_city": normalized,
+                "canonical_city_member": normalized in cities,
+                "source_region_annotation": match[2] if match else None,
+                "matching_pinned_city_state_rows": [{"line_number": number, "city": pair[0], "state": pair[1]}
+                    for number, pair in enumerate(pairs, 1) if match and pair == [normalized, match[2]]],
+                "source_hotel_name_exact": hotel,
+                "matching_canonical_hotel_city_rows": [{key: item[key] for key in ("catalog_item_id", "row_index", "name", "city")}
+                    for item in catalog.values() if item["name"] == hotel and item["city"] == normalized]})
         try:
             parsed = query_memories(row["questions"][0], _extract_name(row["questions"][0]))
             q = {"status": "independent_Q_parser_accepts", "bounded_clause_count": len(parsed)}
@@ -53,6 +76,7 @@ def main():
                 {key: value for key, value in plan.items() if key in {"day", "current_city", "transportation", "accommodation"}}
                 for plan in plans], "first_accommodation_exact": first,
             "frozen_first_accommodation_suffix_matches": suffix_matches,
+            "upstream_city_state_and_hotel_witnesses_diagnostic_only": witnesses,
             "diagnostic_all_day_accommodation_suffix_matches": [
                 {"day_index": index, "accommodation": plan["accommodation"],
                  "matches": [city for city in cities if plan["accommodation"].endswith(", " + city)]}
@@ -64,6 +88,8 @@ def main():
         raise RuntimeError("Assigned source rows unavailable")
     atomic_json(args.output, {"status": "source_only_diagnostic_no_selection_change", "groups": result, "canonical_city_names": cities,
         "source_file_sha256": sha256(source).hexdigest(), "freeze_sha256": digest,
+        "city_state_table_sha256": sha256(state_file.read_bytes()).hexdigest(),
+        "upstream_helper_sha256": sha256(helper_file.read_bytes()).hexdigest(),
         "new_model_calls": 0, "accepted_registry_created": False, "replacements": [],
         "future_traveler_queries_opened": False, "expected_answers_or_query_text_exported": False,
         "interpretation": "Other-day destination fields are diagnostic observations, not fallback rules or a replacement preflight pass."})
