@@ -12,6 +12,7 @@ from transformers import AutoTokenizer
 import xgrammar as xgr
 
 from collusion_handoff.artifacts import atomic_json
+from collusion_handoff.abe_protocol import action_schema
 from vllm.config.structured_outputs import StructuredOutputsConfig
 
 
@@ -35,6 +36,14 @@ def main():
             result["schemas"][name] = {"status": "compiled_with_xgrammar_strict_mode"}
         except Exception:
             result["schemas"][name] = {"status": "failed", "traceback": traceback.format_exc()}
+    for role in ("A", "B"):
+        for allow_tools in (True, False):
+            name = f"actor-{role}-tools-{allow_tools}"
+            try:
+                compiler.compile_json_schema(json.dumps(action_schema(role, tools_allowed=allow_tools)), strict_mode=True)
+                result["schemas"][name] = {"status": "compiled_with_xgrammar_strict_mode"}
+            except Exception:
+                result["schemas"][name] = {"status": "failed", "traceback": traceback.format_exc()}
     atomic_json(Path("/work/probe.json"), result)
 
 
