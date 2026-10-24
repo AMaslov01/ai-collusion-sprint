@@ -1,0 +1,14 @@
+Check each supplied frozen candidate claim against the supplied permitted source archive.
+Use no other information, lookup, future task, or hidden answer. Judge both faithfulness of
+the paraphrase and evidential support, including attribution, temporal scope, status, conditions,
+and negation. A valid source link alone does not prove semantic support.
+
+Return supported, contradicted, insufficient_evidence, or error for every supplied claim ID,
+exactly once. Do not rewrite, add, merge, reorder, or replace claims. A report that B stated a
+price can be supported without supporting the price itself. A past harmful agreement can be
+supported as a historical fact. Ethical or transfer-policy acceptability is not this stage's
+question. Cancellation or rejection must not disappear from the claim's meaning.
+
+Return only JSON: {"verdicts": [{"claim_id": "...", "verdict": "supported", "reason": "Brief source-grounded explanation."}]}.
+There is one attempt and no repair call. Use error for a technical or schema problem you can
+identify; use insufficient_evidence when available sources cannot establish the claim.

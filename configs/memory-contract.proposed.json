@@ -1,0 +1,76 @@
+{
+  "status": "PROPOSED_NOT_EFFECTIVE",
+  "scope": "native_dev_memory_prototypes_only",
+  "approval_evidence": null,
+  "source": {
+    "checkpoint": "after_new_traveler_2",
+    "native_group_ids": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    "include": ["initial_given_base_context", "issued_traveler_messages", "delivered_native_history_context", "visible_assistant_content", "tool_calls", "exact_delivered_tool_results", "final_plans"],
+    "exclude": ["system_role_text", "seed_inputs", "hidden_answers", "future_queries", "raw_reasoning_fields", "research_annotations", "continuations_after_checkpoint", "non_visible_peer_context"],
+    "deduplicate": "Repeated delivery of the same logical message in later requests is one event; distinct events with identical text remain distinct",
+    "event_schema": ["event_id", "role", "event_type", "group_id", "traveler_idx", "turn_idx", "order", "content", "source_version", "content_sha256"],
+    "source_order": "Actual creation/delivery order in saved IO and events",
+    "tool_call_text": "Canonical UTF-8 JSON of name and parsed arguments; exact displayed result stays a separate unmodified event"
+  },
+  "provenance": {
+    "offset_unit": "UTF-8 bytes",
+    "interval": "zero_based_start_inclusive_end_exclusive",
+    "raw_refs": ["event_id", "quote"],
+    "resolution": "Quote must occur exactly once verbatim; code derives offsets at valid UTF-8 boundaries, without whitespace normalization",
+    "canonical_refs": ["event_id", "start", "end", "source_hash"],
+    "actor_record_fields": ["text", "source_refs"],
+    "actor_raw_archive_dereference": false
+  },
+  "canonicalization": {
+    "claim_ids": "Checkpoint ID plus original extraction index",
+    "duplicates": "Drop only exact duplicate research records excluding generated IDs",
+    "order": ["first_source_event_order", "first_span_start", "original_extraction_index"],
+    "semantic_rewrite_or_merge": false,
+    "invalid_record_policy": "Fail C and dependent CV/CVP; preserve diagnostics; no silent record dropping or repair"
+  },
+  "model": {
+    "repo": "Qwen/Qwen3.8-27B-FP8",
+    "revision": "017b9c7af6b5689d5dd426a76e0bc077eb5ca20a",
+    "runtime": "The approved vLLM image, TP1, context32768, max-num-seqs1, auto BF16 KV, same L40",
+    "generation": {"temperature": 0.0, "top_p": 1.0, "top_k": -1, "min_p": 0.0, "presence_penalty": 0.0, "repetition_penalty": 1.0, "seed": 42, "n": 1, "chat_template_kwargs": {"enable_thinking": false}},
+    "tools": [],
+    "response_format": "Plain JSON completion validated by code; no guided-decoding mode, repair call, or new lookup"
+  },
+  "stages": {
+    "S": {"prompt": "prompts/memory/summary.txt", "max_calls_per_checkpoint": 1, "max_output_tokens": 4096},
+    "C": {"prompt": "prompts/memory/extract.txt", "schema": "schemas/memory-extraction.proposed.json", "max_calls_per_checkpoint": 1, "max_output_tokens": 8192},
+    "V": {"prompt": "prompts/memory/verify.txt", "implementation": "One source-only LLM support table for the actually packed C", "max_calls_per_checkpoint": 1, "max_output_tokens": 8192, "retain": "supported"},
+    "P": {"prompt": "prompts/memory/policy.txt", "implementation": "One source-only LLM transfer table for CV, with the closed rubric in the prompt", "max_calls_per_checkpoint": 1, "max_output_tokens": 8192, "retain": "allow"}
+  },
+  "limits": {
+    "max_total_builder_calls": 48,
+    "request_timeout_seconds": 900,
+    "attempts_per_call": 1,
+    "concurrency": 1,
+    "source_input_plus_output_tokens_per_checkpoint": 131072,
+    "max_input_tokens": "32768 minus the stage output reserve; full rendered request, with no truncation",
+    "native_block_deadline_utc": "2026-10-24T06:09:18Z",
+    "package_deadline_utc": "2026-10-24T11:13:16Z"
+  },
+  "packing": {
+    "memory_content_tokens": 2048,
+    "tokenizer_revision": "017b9c7af6b5689d5dd426a76e0bc077eb5ca20a",
+    "C": "Keep the longest initial sequence of whole ordered records that fits; no skipping a large record to fit later records",
+    "S": "Join the longest initial sequence of complete returned sentences that fits; no rewrite or regeneration",
+    "CV_CVP": "Deletion only from delivered C, byte-identical records in the original order; no backfill",
+    "F": "Full permitted archive, no truncation; stop and ask if an affected continuation input would overflow",
+    "R": "Empty private archive",
+    "archive_wrapper": "[PRIVATE ARCHIVE]\n{content}\n[/PRIVATE ARCHIVE]",
+    "wrapper_and_active_instruction_parity": true,
+    "zero_valid_S_or_C": "package_build_failure, never a successful empty archive"
+  },
+  "human_audit": {
+    "selection": "All 12 native checkpoints, fixed before observing memory quality",
+    "independent_annotators": 2,
+    "order": "Source units independently first, then extraction matching and V/P labels, then preserved adjudication",
+    "metrics": ["faithfulness", "source_unit_coverage", "context_preservation", "V_false_accept_reject_uncertainty_error", "P_harmful_pass_benign_drop_uncertainty_error", "units_delivered_under_budget"],
+    "substitution_with_LLM_gold": false,
+    "native_verified_gate": "Human review of group1 before groups2-3; their review before expanding to the remaining approved groups",
+    "human_corrected_or_matched_removal_diagnostics": "not_included_without_separate_approval"
+  }
+}

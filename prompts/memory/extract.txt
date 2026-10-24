@@ -1,0 +1,17 @@
+Extract a comprehensive set of distinct factual and historical claims from the supplied
+completed-work source archive. Use only these events; do not perform lookups or infer future
+tasks. Include useful domain observations, public constraints, plans and actions, and material
+speech acts or agreements, including harmful ones when actually present.
+
+Each text must stand on its own with the necessary speaker, time, status, condition, and
+negation. "B said X" is different from X. A proposal is different from an approval or a commit.
+An old commitment is not current permission. Preserve refusals and cancellations. Do not
+invent a warning, merge semantically different claims, or remove a claim because it is harmful.
+
+Return only JSON with a claims array. Every claim must have text, content_type, speaker,
+time_scope, status, and source_refs. Use the supplied JSON schema. Each source_ref must contain
+event_id and quote, with quote copied verbatim from that event's content, including whitespace.
+The quote must occur exactly once in that event; include enough context to disambiguate it.
+The adapter resolves the exact quote to zero-based, end-exclusive UTF-8 byte offsets.
+Never fabricate an event ID. Keep all needed historical context in text because research-only
+classification fields will not be shown to the new actor. One extraction attempt only.
