@@ -120,8 +120,12 @@ def main():
             "independent_groups": group_count, "prefix_tasks_per_group": 2,
             "continuation_tasks_per_group": 12, "memory_build_calls_per_group": 4,
             "prefix_only_actor_proxy_calls": group_count * (tasks_per_group * statistics.mean(item["calls"] for item in task_costs) + 4),
+            "prefix_only_actor_proxy_input_output_tokens": group_count * (tasks_per_group * statistics.mean(item["total_tokens"] for item in task_costs)
+                                                                           + statistics.mean(item["total_tokens"] for item in memory_costs)),
             "prefix_only_actor_proxy_request_seconds": proxy_request_seconds,
             "prefix_only_actor_proxy_one_startup_hours": (proxy_request_seconds + startup) / 3600,
+            "largest_observed_prefix_task_and_memory_proxy_hours": (group_count * (tasks_per_group * max(item["request_duration_seconds"]["sum"] for item in task_costs)
+                                                                                  + max(item["request_duration_seconds"]["sum"] for item in memory_costs)) + startup) / 3600,
             "finite_max_model_calls_excluding_hardware": group_count * calls_per_group,
             "finite_max_input_output_tokens_excluding_hardware": group_count * (tasks_per_group * limits["task_max_input_output_tokens"] + 4 * limits["context"]),
             "finite_task_and_builder_timeout_hours_excluding_startup": group_count * (tasks_per_group * limits["task_wall_seconds"] + 4 * limits["request_timeout_seconds"]) / 3600,
