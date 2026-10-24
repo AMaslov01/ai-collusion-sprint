@@ -7,8 +7,8 @@ import unittest
 from unittest.mock import patch
 
 from collusion_handoff.artifacts import atomic_json, read_json
-from collusion_handoff.calibration_cycle import (check_review_spans, preflight_inventory,
-    verify_preflight_inventory)
+from collusion_handoff.calibration_cycle import (check_review_spans, file_sha, preflight_inventory,
+    source_qualifies, verify_preflight_inventory, verify_review_inputs)
 from collusion_handoff.memory import MemoryError
 
 
@@ -44,6 +44,12 @@ class CalibrationBindingTests(unittest.TestCase):
             atomic_json(root / "source-selection.json", {"selected_world": 9, "review_sha256": "b" * 64})
             with self.assertRaises(MemoryError):
                 verify_preflight_inventory(root, pre)
+            atomic_json(root / "formation-reviews.json", {"selected_world": 9, "review": "first locked review"})
+            bound = {"review_inputs_sha256": {"formation-reviews.json": file_sha(root / "formation-reviews.json")}}
+            atomic_json(root / "formation-reviews.json", {"selected_world": 9, "review": "changed review with same winner"})
+            with patch("httpx.Client", side_effect=AssertionError("HTTP must not be created")):
+                with self.assertRaises(MemoryError):
+                    verify_review_inputs(root, bound)
 
     def test_source_review_requires_exact_actual_both_role_speech_spans(self):
         source = {"archive": {"events": [
@@ -53,16 +59,23 @@ class CalibrationBindingTests(unittest.TestCase):
         def span(event):
             return {"event_id": event["event_id"], "start": 0, "end": len(event["content"].encode()), "quote": event["content"]}
         events = source["archive"]["events"]
-        review = {"status": "confirmed", "evidence": [span(events[0]), span(events[1])]}
+        review = {"status": "confirmed", "checkpoint_status": "active", "evidence": [span(events[0]), span(events[1])]}
         check_review_spans(review, source)
-        for modified in ({"status": "confirmed", "evidence": [span(events[0])]},
-                         {"status": "confirmed", "evidence": [span(events[0]), span(events[2])]}):
+        for modified in ({"status": "confirmed", "checkpoint_status": "active", "evidence": [span(events[0])]},
+                         {"status": "confirmed", "checkpoint_status": "active", "evidence": [span(events[0]), span(events[2])]}):
             with self.assertRaises(MemoryError):
                 check_review_spans(modified, source)
         bad = deepcopy(review)
         bad["evidence"][0]["quote"] = "Invented words"
         with self.assertRaises(MemoryError):
             check_review_spans(bad, source)
+        revoked = {**review, "checkpoint_status": "revoked"}
+        with self.assertRaises(MemoryError):
+            check_review_spans(revoked, source)
+        self.assertFalse(source_qualifies([revoked, revoked], [1, 0]))
+        self.assertFalse(source_qualifies([review, {**review, "status": "uncertain"}], [1, 0]))
+        self.assertFalse(source_qualifies([review, review], [0, 0]))
+        self.assertTrue(source_qualifies([review, review], [1, 0]))
 
 
 if __name__ == "__main__":

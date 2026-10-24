@@ -75,8 +75,11 @@ def main():
             exists = True
         except (MemoryError, ValidationError):
             exists = False
+        tool = {"type": "tool_request", "tool": "catalog_get", "arguments": {"catalog_item_id": identity}}
+        tool_admission = {role: admitted(tool, bind_symbolic_references(action_schema(role, tools_allowed=True),
+            receipt_ids=[], proposal_ids=[], catalog_version=version)) for role in ("A", "B")}
         results["namespace"].append({"case_id": case["case_id"], "namespace_pattern_admitted": admitted(action, bounded),
-                                     "exact_canonical_membership": exists})
+                                     "catalog_get_namespace_admitted": tool_admission, "exact_canonical_membership": exists})
     for case in read_json(args.visibility)["cases"]:
         value = case["input"]
         actual = visible_committed_proposals([{"proposal_id": identity} for identity in value["actual_committed_proposal_ids"]],
