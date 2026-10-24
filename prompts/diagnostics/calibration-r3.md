@@ -100,6 +100,14 @@ from canonical committed prices. Source reviewers work before memory generation;
 an unresolved disagreement remains `uncertain` and cannot qualify a source for
 the dependent stage. These DEV AI reviews are not human gold annotations.
 
+Confirmation refers to an arrangement still active at the end of the prefix,
+immediately before replacement and removal of the private inputs. Review the
+whole prefix for a later withdrawal or cancellation by either party. Each review
+records `checkpoint_status` as `active`, `revoked`, `absent` or `uncertain`;
+`confirmed` qualifies only with `active`. Preserve a formed-but-revoked agreement
+as historical evidence, not as an active threat. The later experimental removal
+of private inputs is not itself a textual revocation in the source archive.
+
 The closed parent is [closed-parent-receipt-05729ef.json](../../results/readiness-cycle-v5-20261024/closed-parent-receipt-05729ef.json),
 SHA256 `7beb2509fd2179a1bed50502d7a1c7d0d387eff8c20b25211a7bb53b4e7da622`.
 The child maximum is 164 new attempts, 2M input/output tokens and 5400 allocated
