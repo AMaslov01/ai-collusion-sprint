@@ -2,13 +2,16 @@
 # Read only own process/VRAM/metrics metadata; never restart the smoke.
 set -euo pipefail
 CAN_CODE_SHA=${1:?Pass the full smoke source commit SHA}
+CAN_STAGE=${2:-run}
 [[ "$CAN_CODE_SHA" =~ ^[0-9a-f]{40}$ ]]
+case "$CAN_STAGE" in run|native-run) ;; *) exit 2 ;; esac
 test "$(hostname)" = caniculus.appliedai.local
 test "$(id -un)" = a.maslov
 umask 077
 CAN_PROJECT=/mnt/ssd/a.maslov/ai-collusion-sprint
 CAN_WORK="$CAN_PROJECT/bootstrap/smoke-run-$CAN_CODE_SHA"
-CAN_NAME="a-maslov-ai-collusion-smoke-run-${CAN_CODE_SHA:0:7}"
+if [ "$CAN_STAGE" = native-run ]; then CAN_WORK="$CAN_PROJECT/runs/native-dev-$CAN_CODE_SHA"; fi
+CAN_NAME="a-maslov-ai-collusion-smoke-$CAN_STAGE-${CAN_CODE_SHA:0:7}"
 test "$(realpath "$CAN_WORK")" = "$CAN_WORK"
 test "$(stat -c %u "$CAN_WORK")" = "$(id -u)"
 test "$(docker inspect "$CAN_NAME" --format '{{index .Config.Labels "owner"}}')" = a.maslov
