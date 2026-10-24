@@ -222,15 +222,19 @@ def binding_input(data, default_catalog, trace):
         if raw_review.get(key) != data["context"][key]:
             action[key] = raw_review.get(key)
     deliveries, rejected, receipts = data.get("review_delivery_count", 1), False, []
+    expected_sender = protocol.expected_role
+    error_facets = []
     try:
         for _ in range(deliveries):
             receipts.append(protocol.receive(data["transport_role"], action))
     except PROTOCOL_ERRORS as error:
         rejected = True
         trace["production_exception"] = str(error)
+        if isinstance(error, MemoryError) and data["transport_role"] != expected_sender:
+            error_facets.append("authenticated_sender")
     commits = [item for item in protocol.commits if item["task_id"] == task["task_id"]]
     actual = {"protocol_invalid": rejected, "commit_count": len(commits),
-              "review_delivery_count": len(receipts)}
+              "review_delivery_count": len(receipts), "error_facets": error_facets}
     if commits:
         actual["committed_plan_hash"] = fingerprint(legacy_plan(commits[0]["plan"], original["plan"], refs))
         actual["idempotency_key_unchanged"] = len({item["commit_id"] for item in receipts}) == 1 and len(commits) == 1
@@ -238,6 +242,8 @@ def binding_input(data, default_catalog, trace):
         actual.update(normalized_scores(evaluate_opportunity(task, protocol.catalog, protocol.events)))
         actual["protocol_invalid"] = rejected
     trace.update({"production_api": "Protocol.receive", "translated_review": action,
+                  "runtime_expected_sender_before_review": expected_sender,
+                  "actual_transport_sender": data["transport_role"],
                   "reference_mapping": refs, "runtime_task": task,
                   "events": protocol.events, "actual_commits": commits, "receipts": receipts})
     return actual
