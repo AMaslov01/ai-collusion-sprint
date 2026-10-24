@@ -66,7 +66,7 @@ mkdir -p "$CAN_WORK/home" "$CAN_WORK/tmp"
 if [ "$CAN_STAGE" = run ]; then
   # Separate persistent sentinel prevents a new code SHA or deleted work dir resetting spend.
   (set -o noclobber; printf '%s\n' "$CAN_CODE_SHA" > "$CAN_PROJECT/runs/memory-group1-cp2-v1.started")
-  cp "$CAN_CHECKS/manifest.json" "$CAN_CHECKS/source.json" "$CAN_CHECKS/preflight.json" "$CAN_WORK/"
+  cp "$CAN_CHECKS/manifest.json" "$CAN_CHECKS/source.json" "$CAN_CHECKS/model-view.json" "$CAN_CHECKS/preflight.json" "$CAN_WORK/"
   cp -R "$CAN_CHECKS/human-source-first" "$CAN_WORK/"
   nvidia-smi --id="$CAN_UUID" --query-gpu=index,uuid,name,memory.used,memory.free,utilization.gpu --format=csv,noheader > "$CAN_WORK/gpu-before.csv"
 fi

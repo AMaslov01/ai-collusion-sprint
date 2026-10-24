@@ -16,7 +16,7 @@ from transformers import AutoTokenizer
 
 from . import smoke
 from .artifacts import append_event, atomic_json, canonical, fingerprint, read_json
-from .memory import build_packages, require, stage_messages, strict_json
+from .memory import MODEL_EVENT_FIELDS, build_packages, model_source_view, require, stage_messages, strict_json
 from .memory_source import build_source
 
 
@@ -42,6 +42,10 @@ def task_deadline(contract):
     require(contract["limits"]["max_total_builder_calls"] == 4, "Unapproved attempt budget")
     require(contract["source"]["native_group_ids"] == [1], "Only group1 is approved")
     require(contract["deadline_approval_evidence"]["human_message_id"] == "01a16d43-ab1f-79c1-935e-db5bdd1935ed", "Missing time approval")
+    if "model_event_fields" in contract["stage_input_envelope"]:
+        require(contract["stage_input_envelope"]["model_event_fields"] == list(MODEL_EVENT_FIELDS), "Unapproved projection fields")
+        evidence = contract.get("model_view_approval_evidence", {})
+        require(evidence.get("status") == "verified_actual_human_reply" and evidence.get("human_message_id"), "Model-view human approval is missing")
     return min(approved, package)
 
 
@@ -81,12 +85,16 @@ def prepare(contract):
     source = build_source(NATIVE, UPSTREAM)
     require(source["native_scientific_fingerprint"] == SOURCE_SCIENCE, "Unexpected native source")
     assets = assets_for(contract)
+    view = model_source_view(source["archive"], contract["stage_input_envelope"].get("model_event_fields"))
     manifest = {"scope": contract["scope"], "adapter_commit": os.environ["ADAPTER_COMMIT"],
                 "source_archive_sha256": source["archive_sha256"], "source_scientific_fingerprint": SOURCE_SCIENCE,
                 "contract_sha256": sha256(CONTRACT.read_bytes()).hexdigest(),
                 "assets_sha256": fingerprint(assets), "generation": contract["model"]["generation"],
+                "model_source_view_sha256": fingerprint(view),
+                "model_source_version": view.get("source_version"),
                 "limits": contract["limits"], "approval_evidence": contract["approval_evidence"],
                 "deadline_approval_evidence": contract["deadline_approval_evidence"],
+                "model_view_approval_evidence": contract.get("model_view_approval_evidence"),
                 "model": read_json(smoke.CONFIG)["model"],
                 "runtime_argv": smoke.server_command(read_json(smoke.CONFIG), ALIAS)}
     plan_sha = fingerprint(manifest)
@@ -96,6 +104,7 @@ def prepare(contract):
     else:
         atomic_json(existing, {"plan": manifest, "plan_sha256": plan_sha})
     atomic_json(WORK / "source.json", source)
+    atomic_json(WORK / "model-view.json", view)
     source_first(source)
     return source, assets, plan_sha
 
@@ -216,7 +225,8 @@ def preflight(contract):
     tokens = tokenizer()
     counts = {}
     for stage in ("S", "C"):
-        messages = stage_messages(stage, source["archive"], source["archive_sha256"], [], assets[stage]["schema"], assets[stage]["prompt"])
+        messages = stage_messages(stage, source["archive"], source["archive_sha256"], [], assets[stage]["schema"], assets[stage]["prompt"],
+                                  event_fields=contract["stage_input_envelope"].get("model_event_fields"))
         encoded = tokens.apply_chat_template(messages, tokenize=True, add_generation_prompt=True,
                                              enable_thinking=False, return_dict=False)
         require(isinstance(encoded, list) and all(type(token) is int for token in encoded), "Unexpected preliminary tokenizer return type")
@@ -232,10 +242,15 @@ def preflight(contract):
         diagnostic_views[name] = {}
         for stage in ("S", "C"):
             diagnostic_archive = {**source["archive"], "events": events}
-            messages = stage_messages(stage, diagnostic_archive, source["archive_sha256"], [], assets[stage]["schema"], assets[stage]["prompt"])
+            # The measured compact view includes the shared pinned version once.
+            if name == "compact_proposed_unapproved":
+                diagnostic_archive = source["archive"]
+            messages = stage_messages(stage, diagnostic_archive, source["archive_sha256"], [], assets[stage]["schema"], assets[stage]["prompt"],
+                event_fields=list(MODEL_EVENT_FIELDS) if name == "compact_proposed_unapproved" else None)
             diagnostic_views[name][stage] = len(tokens.apply_chat_template(messages, tokenize=True,
                 add_generation_prompt=True, enable_thinking=False, return_dict=False))
-    atomic_json(WORK / "input-diagnostics.json", {"actual_full_source_counts": counts,
+    atomic_json(WORK / "input-diagnostics.json", {"actual_model_view_counts": counts,
+                "actual_model_event_fields": contract["stage_input_envelope"].get("model_event_fields", "all_source_event_fields"),
                 "not_authorized_for_inference_diagnostic_views": diagnostic_views,
                 "source_events": len(source["archive"]["events"]), "source_archive_sha256": source["archive_sha256"],
                 "content_removed": False, "events_removed": False, "new_model_calls": 0})
@@ -257,6 +272,8 @@ def cache_audit(contract):
     require(manifest["plan"]["contract_sha256"] == sha256(CONTRACT.read_bytes()).hexdigest(), "Contract changed")
     assets = assets_for(contract)
     require(manifest["plan"]["assets_sha256"] == fingerprint(assets), "Prompts or schemas changed")
+    view = model_source_view(source["archive"], contract["stage_input_envelope"].get("model_event_fields"))
+    require(view == read_json(completed / "model-view.json") and fingerprint(view) == manifest["plan"]["model_source_view_sha256"], "Model source view changed")
     streams = []
     for name in ("requests", "responses"):
         path = completed / f"io/{name}.jsonl"

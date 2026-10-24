@@ -7,7 +7,7 @@ import math
 
 from jsonschema import Draft202012Validator
 
-from .artifacts import canonical
+from .artifacts import canonical, fingerprint
 
 
 class MemoryError(ValueError):
@@ -122,11 +122,39 @@ def apply_verdicts(claims, verdicts, *, field, retain):
     return selected, errors
 
 
-def stage_messages(stage, archive, archive_sha, candidates, schema, prompt):
+MODEL_EVENT_FIELDS = ("event_id", "role", "event_type", "group_id", "traveler_idx", "turn_idx", "order",
+                      "content", "content_sha256", "origin_event_id", "derived_from")
+
+
+def model_events(events, fields=None):
+    if fields is None:
+        return events
+    require(list(fields) == list(MODEL_EVENT_FIELDS), "Unrecognized model-view projection")
+    projected = [{key: deepcopy(event[key]) for key in fields} for event in events]
+    require(len(projected) == len(events), "Projection removed an event")
+    require(all(all(view[key] == event[key] for key in MODEL_EVENT_FIELDS) for view, event in zip(projected, events)),
+            "Projection changed event content, identity, order or provenance")
+    return projected
+
+
+def model_source_view(archive, fields=None):
+    events = archive["events"]
+    view = {"source_events": model_events(events, fields)}
+    if fields is not None:
+        versions = {canonical(event["source_version"]) for event in events}
+        require(len(versions) == 1, "Source versions differ; do not discard event-specific evidence")
+        view["source_version"] = deepcopy(events[0]["source_version"])
+    return view
+
+
+def stage_messages(stage, archive, archive_sha, candidates, schema, prompt, *, event_fields=None):
+    view = model_source_view(archive, event_fields)
     data = {"stage": stage, "checkpoint_id": archive["checkpoint_id"], "archive_id": archive_sha,
             "source_policy_id": archive["source_policy_id"],
             "rubric_id": "native_transfer_policy_v1_proposed" if stage == "P" else None,
-            "source_events": archive["events"], "candidates": candidates, "response_schema": schema}
+            **view, "candidates": candidates, "response_schema": schema}
+    if event_fields is not None:
+        data["source_view_id"] = fingerprint(view)
     return [{"role": "system", "content": prompt}, {"role": "user", "content": canonical(data).decode()}]
 
 
@@ -147,7 +175,8 @@ def build_packages(source, contract, assets, generate, count_tokens, persist):
     def call(stage, candidates):
         persist("stages/current.json", {"stage": stage, "status": "preparing_single_attempt"})
         asset = assets[stage]
-        messages = stage_messages(stage, archive, source["archive_sha256"], candidates, asset["schema"], asset["prompt"])
+        messages = stage_messages(stage, archive, source["archive_sha256"], candidates, asset["schema"], asset["prompt"],
+                                  event_fields=contract["stage_input_envelope"].get("model_event_fields"))
         text = generate(stage, messages)
         value = validate(text, asset["schema"])
         persist(f"stages/{stage}.json", value)

@@ -9,7 +9,7 @@ import httpx
 
 from collusion_handoff.artifacts import canonical, fingerprint
 from collusion_handoff.memory import (MemoryError, actor_record, apply_verdicts, build_packages,
-                                     claim_content, pack_claims, resolve_claims, strict_json)
+                                     claim_content, pack_claims, resolve_claims, strict_json, model_events, model_source_view, MODEL_EVENT_FIELDS)
 from collusion_handoff.memory_runner import BuilderClient
 
 
@@ -21,7 +21,9 @@ ASSETS = {stage: {"prompt": (ROOT / spec["prompt"]).read_text(), "schema": json.
 
 def fixture(content="é reviewed plan"):
     archive = {"checkpoint_id": "test-cp2", "source_policy_id": "test-policy", "events": [
-        {"event_id": "event-1", "order": 0, "content": content, "content_sha256": sha256(content.encode()).hexdigest()}]}
+        {"event_id": "event-1", "origin_event_id": "event-1", "role": "A", "event_type": "final_plans",
+         "group_id": 1, "traveler_idx": 1, "turn_idx": 1, "order": 0, "derived_from": [],
+         "source_version": {"test": "fixture"}, "content": content, "content_sha256": sha256(content.encode()).hexdigest()}]}
     source = {"archive": archive, "archive_sha256": fingerprint(archive)}
     claim = {"text": "The planner reviewed the plan.", "content_type": "plan_state", "speaker": "A",
              "time_scope": "Completed native prefix", "status": "stated",
@@ -30,6 +32,25 @@ def fixture(content="é reviewed plan"):
 
 
 class MemoryTransformsTest(unittest.TestCase):
+    def test_model_view_preserves_all_event_text_order_and_origins(self):
+        events = [{key: f"{key}-{number}" for key in MODEL_EVENT_FIELDS} for number in (1, 2)]
+        for event in events:
+            event.update({"delivery_refs": ["technical receipt"], "first_delivery": "technical origin", "source_version": "pinned version"})
+        original = canonical(events)
+        compact = model_events(events, list(MODEL_EVENT_FIELDS))
+        self.assertEqual([event["content"] for event in compact], [event["content"] for event in events])
+        self.assertEqual([event["derived_from"] for event in compact], [event["derived_from"] for event in events])
+        self.assertEqual([event["order"] for event in compact], [event["order"] for event in events])
+        self.assertEqual(canonical(events), original)
+        self.assertNotIn("delivery_refs", compact[0])
+        with self.assertRaises(MemoryError):
+            model_events(events, ["event_id", "content"])
+        view = model_source_view({"events": events}, list(MODEL_EVENT_FIELDS))
+        self.assertEqual(view["source_version"], "pinned version")
+        events[1]["source_version"] = "changed version"
+        with self.assertRaises(MemoryError):
+            model_source_view({"events": events}, list(MODEL_EVENT_FIELDS))
+
     def test_strict_parser_rejects_duplicates_nonfinite_fences_and_trailing_text(self):
         for text in ('{"a":1,"a":2}', '{"a":NaN}', '{"a":Infinity}', '{"a":1e999}', '```json\n{}\n```', '{} trailing'):
             with self.subTest(text=text), self.assertRaises((MemoryError, ValueError)):
