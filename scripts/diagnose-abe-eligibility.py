@@ -23,7 +23,10 @@ def main():
     freeze_file = Path("/review/final-DEV-validation-freeze.json")
     freeze, receipt = read_json(freeze_file), read_json(Path("/review/final-freeze-receipt.json"))
     digest = sha256(freeze_file.read_bytes()).hexdigest()
-    if digest not in json.dumps(receipt) or freeze["main_allowed"] is not False or freeze["scope"]["groups"] != [6, 7]:
+    if (receipt.get("manifest_sha256") != digest or receipt.get("status") != "reviewed_for_DEV_validation"
+            or receipt.get("CPU_preflight_source_access_allowed") is not True
+            or receipt.get("code_commit") != freeze["code_commit"]
+            or freeze["main_allowed"] is not False or freeze["scope"]["groups"] != [6, 7]):
         raise RuntimeError("No matching source-access freeze receipt")
     config = read_json(Path("/code/configs/readiness-cycle-v5.json"))
     base = read_json(Path("/code") / config["base_runtime_config"])
@@ -41,26 +44,29 @@ def main():
         first = plans[0]["accommodation"]
         suffix_matches = [city for city in cities if first.endswith(", " + city)]
         try:
-            memories = query_memories(row["questions"][0], _extract_name(row["questions"][0]))
-            q = {"status": "independent_Q_parser_accepts", "memories": memories}
+            parsed = query_memories(row["questions"][0], _extract_name(row["questions"][0]))
+            q = {"status": "independent_Q_parser_accepts", "bounded_clause_count": len(parsed)}
         except Exception as error:
             q = {"status": "independent_Q_parser_rejects", "type": type(error).__name__, "message": str(error)}
         result[str(row["id"])] = {"base_person_name": row["base_person"]["name"],
-            "base_daily_plans_exact": plans, "first_accommodation_exact": first,
+            "base_daily_plan_destination_fields_exact": [
+                {key: value for key, value in plan.items() if key in {"day", "current_city", "transportation", "accommodation"}}
+                for plan in plans], "first_accommodation_exact": first,
             "frozen_first_accommodation_suffix_matches": suffix_matches,
             "diagnostic_all_day_accommodation_suffix_matches": [
                 {"day_index": index, "accommodation": plan["accommodation"],
                  "matches": [city for city in cities if plan["accommodation"].endswith(", " + city)]}
                 for index, plan in enumerate(plans, 1)],
             "base_query_exact": row["base_person"]["query"],
-            "independent_Q_parser_diagnostic_only": q,
+            "independent_first_prefix_query_parser_status_only": q,
             "frozen_screening_passed": len(suffix_matches) == 1}
     if set(result) != {"6", "7"}:
         raise RuntimeError("Assigned source rows unavailable")
-    atomic_json(args.output, {"status": "source_only_diagnostic_no_selection_change", "groups": result,
+    atomic_json(args.output, {"status": "source_only_diagnostic_no_selection_change", "groups": result, "canonical_city_names": cities,
         "source_file_sha256": sha256(source).hexdigest(), "freeze_sha256": digest,
         "new_model_calls": 0, "accepted_registry_created": False, "replacements": [],
-        "interpretation": "Other-day fields and the isolated Q parser are diagnostic observations, not fallback rules or a replacement preflight pass."})
+        "future_traveler_queries_opened": False, "expected_answers_or_query_text_exported": False,
+        "interpretation": "Other-day destination fields are diagnostic observations, not fallback rules or a replacement preflight pass."})
 
 
 if __name__ == "__main__":
