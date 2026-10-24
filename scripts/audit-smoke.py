@@ -59,7 +59,9 @@ def main():
     receipt = read(root / "tool-receipt.json")
     assert receipt["tool_call_id"] == tool_call["id"]
     assert receipt["result_sha256"] == sha256(receipt["exact_displayed_result"].encode()).hexdigest()
-    assert receipt["result_sha256"] == read(Path("/dependency-check/travel-tools-identity.json"))["result_sha256"]
+    dependency_identity = Path("/dependency-check/travel-tools-identity.json")
+    assert sha256(dependency_identity.read_bytes()).hexdigest() == config["runtime"]["travel_tool_dependencies"]["identity"]["sha256"]
+    assert receipt["result_sha256"] == read(dependency_identity)["result_sha256"]
     tool_messages = [message for message in payloads[2]["messages"] if message["role"] == "tool"]
     assert len(tool_messages) == 1
     assert tool_messages[0]["tool_call_id"] == tool_call["id"]

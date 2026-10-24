@@ -34,6 +34,8 @@ CAN_REMAINING=$((CAN_STARTED + CAN_LIMIT - $(date +%s)))
 test "$CAN_REMAINING" -gt 0
 CAN_IMAGE_ID=$(cat "$CAN_PROJECT/bootstrap/environment/image-id.txt")
 CAN_NAME="a-maslov-ai-collusion-$CAN_STAGE-${CAN_CODE_SHA:0:7}"
+CAN_MODEL_MOUNT="type=bind,src=$CAN_MODEL,dst=/model"
+if [ "$CAN_STAGE" != download ]; then CAN_MODEL_MOUNT="$CAN_MODEL_MOUNT,readonly"; fi
 if docker container inspect "$CAN_NAME" >/dev/null 2>&1; then
   printf 'Container already exists: %s\n' "$CAN_NAME" >&2
   exit 2
@@ -49,7 +51,7 @@ docker run -d --name "$CAN_NAME" --label owner=a.maslov \
   --workdir "$CAN_UPSTREAM_MOUNT" \
   --mount "type=bind,src=$CAN_CODE,dst=/code,readonly" \
   --mount "type=bind,src=$CAN_PROJECT/inputs/MemoryArena,dst=$CAN_UPSTREAM_MOUNT,readonly" \
-  --mount "type=bind,src=$CAN_MODEL,dst=/model" \
+  --mount "$CAN_MODEL_MOUNT" \
   --mount "type=bind,src=$CAN_PROJECT/cache,dst=/cache" \
   --mount "type=bind,src=$CAN_WORK,dst=/work" \
   --mount "type=bind,src=$CAN_CONTROL,dst=/control,readonly" \
