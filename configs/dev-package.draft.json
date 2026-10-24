@@ -394,7 +394,9 @@
       "evidence": "User instruction in this chat on 2026-10-24: it is currently night and downloads may run without a speed restriction. Not a standing exemption for future daytime transfers."
     },
     "stop_file": "STOP",
-    "compute_started_unix": 1792797196
+    "compute_started_unix": 1792797196,
+    "native_compute_started_unix": 1792800558,
+    "native_deadline": "2026-10-24T06:09:18Z"
   },
   "budgets": {
     "modal_usd_limit": 0,
@@ -456,7 +458,7 @@
         "max_new_travelers": 4,
         "checkpoint_after": 2,
         "minimum_available_new_requests": 5,
-        "selection_status": "PROPOSED_NOT_EFFECTIVE"
+        "selection_status": "CONFIRMED"
       },
       "evidence": "User explicitly confirmed all three questions in this chat on 2026-10-24: 12x4 selection/snapshot2, proposed native runtime and finite budgets, and pinned JSONL through a thin adapter. No memory-builder or two-agent parameter approval implied."
     },

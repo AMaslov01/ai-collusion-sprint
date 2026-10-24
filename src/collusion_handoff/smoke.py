@@ -59,12 +59,12 @@ def journal_rows(path):
     return [json.loads(line) for line in path.read_text().splitlines(keepends=True) if line.endswith("\n")]
 
 
-def server_command(config):
+def server_command(config, alias=ALIAS):
     smoke = config["smoke"]
     if any(smoke[key] != value for key, value in SMOKE_CONTRACT.items()):
         raise ValueError("Smoke configuration differs from the approved contract")
     return [
-        "vllm", "serve", "/model", "--served-model-name", ALIAS,
+        "vllm", "serve", "/model", "--served-model-name", alias,
         "--tensor-parallel-size", str(smoke["tensor_parallel_size"]),
         "--max-model-len", str(smoke["max_model_len"]),
         "--max-num-seqs", str(smoke["max_num_seqs"]),
@@ -76,7 +76,7 @@ def server_command(config):
     ]
 
 
-def verify_inputs(config):
+def verify_inputs(config, alias=ALIAS):
     if os.getuid() == 0:
         raise RuntimeError("Smoke requires non-root Docker")
     assert version("vllm") == config["runtime"]["vllm_version"]
@@ -112,7 +112,7 @@ def verify_inputs(config):
         "model_architectures": model_config.get("architectures"),
         "adapter_commit": os.environ["ADAPTER_COMMIT"],
         "config_sha256": sha256(CONFIG.read_bytes()).hexdigest(),
-        "server_argv": server_command(config), "model_calls": 0,
+        "server_argv": server_command(config, alias), "model_calls": 0,
     })
 
 
@@ -248,7 +248,7 @@ def resolved_engine():
     })
 
 
-def supervise(config, deadline):
+def supervise(config, deadline, *, client_module="collusion_handoff.smoke", alias=ALIAS, scope="technical_smoke_only"):
     children = []
     interrupted = False
 
@@ -266,9 +266,9 @@ def supervise(config, deadline):
 
     try:
         check()
-        verify_inputs(config)
+        verify_inputs(config, alias)
         with (WORK / "server.log").open("x") as server_log, (WORK / "client.log").open("x") as client_log:
-            server = subprocess.Popen(server_command(config), stdout=server_log, stderr=subprocess.STDOUT, start_new_session=True)
+            server = subprocess.Popen(server_command(config, alias), stdout=server_log, stderr=subprocess.STDOUT, start_new_session=True)
             children.append(server)
             with httpx.Client(timeout=1, trust_env=False) as health:
                 while True:
@@ -283,12 +283,15 @@ def supervise(config, deadline):
                         break
                     time.sleep(1)
             resolved_engine()
-            client = subprocess.Popen([sys.executable, "-m", "collusion_handoff.smoke", "--client"], stdout=client_log, stderr=subprocess.STDOUT, start_new_session=True)
+            client = subprocess.Popen([sys.executable, "-m", client_module, "--client"], stdout=client_log, stderr=subprocess.STDOUT, start_new_session=True)
             children.append(client)
             while client.poll() is None:
                 check()
                 if server.poll() is not None:
                     raise RuntimeError("vLLM exited during the smoke client")
+                current_job = WORK / "current-job.json"
+                if current_job.exists() and time.time() >= json.loads(current_job.read_text())["deadline_unix"]:
+                    raise RuntimeError("Native traveler wall-time budget exhausted")
                 request_path = WORK / "io/requests.jsonl"
                 response_path = WORK / "io/responses.jsonl"
                 if request_path.exists():
@@ -301,7 +304,8 @@ def supervise(config, deadline):
                 time.sleep(0.2)
             if client.returncode != 0:
                 raise RuntimeError(f"Smoke client failed with exit {client.returncode}; inspect client.log")
-            save("status.json", {"status": "passed", "scope": "technical_smoke_only", "finished_at": datetime.now(timezone.utc).isoformat()})
+            status_file = "status.json" if scope == "technical_smoke_only" else "server-session-status.json"
+            save(status_file, {"status": "passed", "scope": scope, "finished_at": datetime.now(timezone.utc).isoformat()})
     except BaseException:
         save("status.json", {"status": "stopped_needs_review", "traceback": traceback.format_exc(), "finished_at": datetime.now(timezone.utc).isoformat()})
         raise

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# One bounded technical smoke; this script never starts either DEV block.
+# Bounded model sessions; native-run admits only the first approved DEV group.
 set -euo pipefail
 CAN_CODE_SHA=${1:?Pass the full committed adapter SHA}
-CAN_STAGE=${2:?Choose validate, run, audit or native-checks}
+CAN_STAGE=${2:?Choose validate, run, audit, native-checks or native-run}
 [[ "$CAN_CODE_SHA" =~ ^[0-9a-f]{40}$ ]]
-case "$CAN_STAGE" in validate|run|audit|native-checks) ;; *) exit 2 ;; esac
+case "$CAN_STAGE" in validate|run|audit|native-checks|native-run) ;; *) exit 2 ;; esac
 test "$(hostname)" = caniculus.appliedai.local
 test "$(id -un)" = a.maslov
 test "$(id -u)" -ne 0
@@ -17,6 +17,7 @@ CAN_IDENTITIES="$CAN_PROJECT/bootstrap/preparation-31f9c028bd8615c4b7648144c278e
 CAN_LOCK_SHA=$(sha256sum "$CAN_CODE/configs/travel-tools.lock" | cut -d ' ' -f 1)
 CAN_VENDOR="$CAN_PROJECT/dependencies/travel-tools-$CAN_LOCK_SHA"
 CAN_WORK="$CAN_PROJECT/bootstrap/smoke-$CAN_STAGE-$CAN_CODE_SHA"
+if [ "$CAN_STAGE" = native-run ]; then CAN_WORK="$CAN_PROJECT/runs/native-dev-$CAN_CODE_SHA"; fi
 CAN_UPSTREAM=/opt/ai-collusion/sources/MemoryArena
 CAN_UUID=GPU-441e6008-cd27-34b5-c81a-17dad9d4a894
 for CAN_PATH in "$CAN_PROJECT" "$CAN_CODE" "$CAN_MODEL" "$CAN_VENDOR" "$CAN_IDENTITIES" "$CAN_PROJECT/inputs/MemoryArena" "$CAN_PROJECT/inputs/travel-database" "$CAN_PROJECT/cache"; do
@@ -30,12 +31,26 @@ test "$(jq -r '.runtime.travel_tool_dependencies.status' "$CAN_CONFIG")" = confi
 CAN_STARTED=$(cat "$CAN_PROJECT/bootstrap/environment/compute-start.unix")
 CAN_LIMIT=$(jq -r '.operations.wall_time_seconds' "$CAN_CONFIG")
 CAN_DEADLINE=$((CAN_STARTED+CAN_LIMIT))
+CAN_PACKAGE_DEADLINE=$CAN_DEADLINE
 CAN_REMAINING=$((CAN_DEADLINE-$(date +%s)))
 test "$CAN_REMAINING" -gt 0
+CAN_NATIVE_START="$CAN_PROJECT/bootstrap/environment/native-start.unix"
+if [ "$CAN_STAGE" = native-checks ] || [ "$CAN_STAGE" = native-run ]; then
+  # The first native-only CPU check already ran at this recorded UTC time.
+  if [ ! -e "$CAN_NATIVE_START" ]; then printf '1792800558\n' > "$CAN_NATIVE_START"; fi
+  CAN_NATIVE_STARTED=$(cat "$CAN_NATIVE_START")
+  CAN_NATIVE_LIMIT=$(jq -r '.block_contracts.native_dev.wall_time_seconds' "$CAN_CONFIG")
+  CAN_NATIVE_DEADLINE=$((CAN_NATIVE_STARTED+CAN_NATIVE_LIMIT))
+  if [ "$CAN_NATIVE_DEADLINE" -lt "$CAN_DEADLINE" ]; then CAN_DEADLINE="$CAN_NATIVE_DEADLINE"; fi
+  CAN_REMAINING=$((CAN_DEADLINE-$(date +%s)))
+  test "$CAN_REMAINING" -gt 0
+else
+  CAN_NATIVE_DEADLINE="$CAN_DEADLINE"
+fi
 CAN_DEVICE=(--env NVIDIA_VISIBLE_DEVICES=void --env CUDA_VISIBLE_DEVICES=)
 CAN_ACTION=(--validate-only)
 CAN_EXTRA_MOUNTS=()
-if [ "$CAN_STAGE" = native-checks ]; then
+if [ "$CAN_STAGE" = native-checks ] || [ "$CAN_STAGE" = native-run ]; then
   CAN_TASKS=$(dirname "$(jq -r '.data.file_hashes.registry.path' "$CAN_CONFIG")")
   test "$(realpath "$CAN_TASKS")" = "$CAN_TASKS"
   test "$(stat -c %u "$CAN_TASKS")" = "$(id -u)"
@@ -54,7 +69,7 @@ if [ "$CAN_STAGE" = audit ]; then
   CAN_EXTRA_MOUNTS=(--mount "type=bind,src=$CAN_COMPLETED,dst=/smoke,readonly" --mount "type=bind,src=$CAN_DEPENDENCY_CHECK,dst=/dependency-check,readonly")
   CAN_ACTION=(--audit)
 fi
-if [ "$CAN_STAGE" = run ]; then
+if [ "$CAN_STAGE" = run ] || [ "$CAN_STAGE" = native-run ]; then
   test "$(jq -r '.operations.gpu_uuid' "$CAN_CONFIG")" = "$CAN_UUID"
   test "$(jq -r '.operations.gpu_reservation.channel_notified' "$CAN_CONFIG")" = true
   nvidia-smi --id="$CAN_UUID" --query-gpu=index,uuid,name,memory.used,memory.free,utilization.gpu --format=csv,noheader > "$CAN_WORK/gpu-before.csv"
@@ -62,13 +77,15 @@ if [ "$CAN_STAGE" = run ]; then
   test -z "$(ss -H -lnt 'sport = :18083')"
   CAN_DEVICE=(--gpus "device=$CAN_UUID")
   CAN_ACTION=()
+  if [ "$CAN_STAGE" = native-run ]; then CAN_ACTION=(--native-run); fi
 fi
 CAN_NAME="a-maslov-ai-collusion-smoke-$CAN_STAGE-${CAN_CODE_SHA:0:7}"
 docker run -d --name "$CAN_NAME" --label owner=a.maslov --label "adapter_commit=$CAN_CODE_SHA" \
   --user "$(id -u):$(id -g)" --restart=no --network=host \
   --cpus 8 --memory 64g --pids-limit 1024 --shm-size 8g \
   --security-opt=no-new-privileges --cap-drop=ALL "${CAN_DEVICE[@]}" \
-  --env "ADAPTER_COMMIT=$CAN_CODE_SHA" --env "PACKAGE_DEADLINE_UNIX=$CAN_DEADLINE" \
+  --env "ADAPTER_COMMIT=$CAN_CODE_SHA" --env "PACKAGE_DEADLINE_UNIX=$CAN_PACKAGE_DEADLINE" \
+  --env "NATIVE_DEADLINE_UNIX=$CAN_NATIVE_DEADLINE" \
   --env HOME=/work/home --env TMPDIR=/work/tmp --env PYTHONDONTWRITEBYTECODE=1 \
   --env HF_HOME=/cache/hf --env HF_HUB_OFFLINE=1 --env TRANSFORMERS_OFFLINE=1 \
   --env XDG_CACHE_HOME=/cache/xdg --env TORCH_HOME=/cache/torch \
@@ -89,6 +106,6 @@ docker run -d --name "$CAN_NAME" --label owner=a.maslov --label "adapter_commit=
   "${CAN_EXTRA_MOUNTS[@]}" \
   --entrypoint /usr/bin/timeout "$(cat "$CAN_PROJECT/bootstrap/environment/image-id.txt")" \
   --signal=TERM --kill-after=30s "${CAN_REMAINING}s" /bin/bash -c \
-  'set -e; umask 077; test ! -e /control/STOP; if [ "${1-}" = --audit ]; then exec python3 /code/scripts/audit-smoke.py > /work/audit.log 2>&1; fi; if [ "$#" -gt 0 ]; then python3 -m unittest discover -s /code/tests -v > /work/unittest.log 2>&1; fi; if [ "${1-}" = --native-checks ]; then exec python3 /code/scripts/check-native-import.py > /work/native-import.log 2>&1; fi; exec python3 -m collusion_handoff.smoke "$@" > /work/supervisor.log 2>&1' \
+  'set -e; umask 077; test ! -e /control/STOP; if [ "${1-}" = --audit ]; then exec python3 /code/scripts/audit-smoke.py > /work/audit.log 2>&1; fi; if [ "${1-}" = --native-run ]; then exec python3 -m collusion_handoff.native_adapter > /work/supervisor.log 2>&1; fi; if [ "$#" -gt 0 ]; then python3 -m unittest discover -s /code/tests -v > /work/unittest.log 2>&1; fi; if [ "${1-}" = --native-checks ]; then exec python3 /code/scripts/check-native-import.py > /work/native-import.log 2>&1; fi; exec python3 -m collusion_handoff.smoke "$@" > /work/supervisor.log 2>&1' \
   -- "${CAN_ACTION[@]}"
 docker inspect "$CAN_NAME" > "$CAN_WORK/docker-inspect.json"
