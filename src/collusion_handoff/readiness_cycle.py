@@ -92,6 +92,13 @@ def smoke_payload(config):
 def preflight():
     config, base, assets = settings()
     identity = phase_identity(config, base, assets)
+    if identity["phase"] == "development-prefix-v1":
+        from .abe_cycle import actor_preflight
+        actor_preflight(config, base, assets, WORK, [4, 5])
+        atomic_json(WORK / "phase-manifest.json", identity)
+        atomic_json(WORK / "preflight.json", {"status": "passed_no_model_calls", "identity": identity,
+                    "actor_preflight": read_json(WORK / "actor-preflight.json"), "new_model_calls": 0})
+        return
     tokens = AutoTokenizer.from_pretrained("/model", local_files_only=True)
     definitions = read_json(CODE / "fixtures/memory-semantic-v3.json")["fixtures"]
     probes, counts = {}, {}
@@ -200,7 +207,7 @@ def run_client():
     config, base, assets = settings()
     identity = phase_identity(config, base, assets)
     receipt = verify_dispatch(identity)
-    require(identity["phase"] == "development-memory-v1", "This phase is not yet implemented/reviewed")
+    require(identity["phase"] in {"development-memory-v1", "development-prefix-v1"}, "This phase is not yet implemented/reviewed")
     master = {"run_id": config["run_id"], "authority": config["authority"], "limits": config["limits"],
               "allocations": config["allocations"], "selection": config["selection"], "model": base["model"],
               "runtime": base["runtime"], "paid_api_budget_usd": 0}
@@ -215,6 +222,9 @@ def run_client():
     jobs = {}
     with httpx.Client(trust_env=False, follow_redirects=False, transport=httpx.HTTPTransport(retries=0)) as http:
         budget = CycleBudget(ROOT, config, http, phase_work=WORK)
+        if identity["phase"] == "development-prefix-v1":
+            from .abe_cycle import prefix_phase
+            return prefix_phase(config, base, budget, WORK)
         probe = dispatch(budget, smoke_payload(config), identity["phase"] + "/structured-capability", "developmental_memory_and_known_fixtures", WORK / "capability")
         require(decode_v4("capability", content(probe), smoke_payload(config)["response_format"]["json_schema"]["schema"]) == {"value": "ok"}, "Structured capability probe failed")
         for number, path in known_sources().items():
@@ -244,7 +254,7 @@ def main():
     config, base, assets = settings()
     identity = phase_identity(config, base, assets)
     verify_dispatch(identity)
-    require(identity["phase"] == "development-memory-v1", "No unreviewed phase startup")
+    require(identity["phase"] in {"development-memory-v1", "development-prefix-v1"}, "No unreviewed phase startup")
     deadline = min(float(os.environ["PACKAGE_DEADLINE_UNIX"]), time.time() + config["limits"]["gpu_service_wall_seconds"])
     smoke.supervise(base, deadline, client_module="collusion_handoff.readiness_cycle", alias=ALIAS,
                     scope="v4_bounded_developmental_memory_only", server_extra_args=("--structured-outputs-config.backend", "xgrammar"))
