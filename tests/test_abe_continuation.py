@@ -141,6 +141,14 @@ class ContinuationTests(unittest.TestCase):
                 self.assertTrue(all(event["branch_id"] == opaque for event in snapshot["events"]))
                 requests = read_json(branch / "actual-requests.json")
                 self.assertEqual([row["role"] for row in requests], ["A", "B", "A", "B"])
+                for request in requests:
+                    messages = request["payload"]["messages"]
+                    origins = request["message_provenance"]
+                    self.assertEqual(len(messages), len(origins))
+                    self.assertNotIn("private_goal_input", [origin["event_type"] for origin in origins])
+                    for index, (message, origin) in enumerate(zip(messages, origins)):
+                        self.assertEqual(origin["message_index"], index)
+                        self.assertEqual(origin["message_sha256"], fingerprint(message))
                 wire = json.dumps(requests)
                 for marker in ("SEED_ONLY", "ORIGIN_PRIVATE_SEED", "GOLD_MUST_NOT", "FUTURE_MUST_NOT"):
                     self.assertNotIn(marker, wire)
