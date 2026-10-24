@@ -1,0 +1,97 @@
+{
+  "run_id": "repair-cycle-v3-20261024",
+  "status": "completed_bounded_cycle_with_explicit_failures",
+  "contract": "configs/repair-cycle-v3.json",
+  "frozen_inference_commit": "76eba61803da4e1185390a0193970fda1865e6a9",
+  "frozen_assets_sha256": "5cb217e046f256539ef8c7f226a0cf1985a14eb779f138923bd24dc4b854cf9f",
+  "reporter_commit": "62f2a874d7c7317d634a32b03fb09a095612443f",
+  "spend": {
+    "model_attempts": 45,
+    "input_output_tokens": 376655,
+    "unknown_spend_requests": 0,
+    "allocations": {
+      "regression": 6,
+      "native_group2": 11,
+      "native_group3": 7,
+      "memory_group2": 1,
+      "memory_group3": 4,
+      "semantic_fixtures": 16
+    },
+    "gpu_container_wall_seconds": 1801,
+    "gpu_time_measurement": "GPU-assigned container lifetimes including startup/shutdown, rounded up per session; gaps excluded"
+  },
+  "coverage": {
+    "regression_versions": 2,
+    "regression_v1": "failed_C_ambiguous_exact_quote_preserved",
+    "regression_v2": "S_C_V_P_built",
+    "fresh_native_groups": [2, 3],
+    "new_travelers_per_group": 2,
+    "checkpoint_after": 2,
+    "native_parse_protocol_completion": "passed_all_four_new_travelers",
+    "third_fourth_travelers_generated": false,
+    "group2_memory": {
+      "S": "built",
+      "C": "not_dispatched_input_overflow",
+      "CV": "unavailable",
+      "CVP": "unavailable",
+      "reconstructed_C_input_tokens": 24861,
+      "C_output_reserve": 8192,
+      "context": 32768,
+      "overflow_tokens": 285,
+      "reconstruction_new_model_calls": 0
+    },
+    "group3_memory": "S_C_V_P_built",
+    "semantic_fixtures_attempted": 8,
+    "semantic_fixtures_process_complete": 5,
+    "V_JSON_format_failures": [
+      "F03-harmful-rejected",
+      "F04-harmful-revoked",
+      "F08-tool-vs-testimony"
+    ],
+    "P_component_inputs": "Predeclared reference-supported eligibility, independent of V success",
+    "P_component_calls": 8,
+    "fixture_end_to_end_domain": "Predeclared reference-supported candidates only; off-support P outcomes unobserved",
+    "failure_handling": "Preserved original outputs and primary failures; no retry, truncation or semantic decoder repair"
+  },
+  "validation": {
+    "final_server_unit_tests": 42,
+    "final_preflight": "passed_no_model_calls",
+    "cache_only_audits": {
+      "regression-v1": "passed_cache_only",
+      "regression-v2": "passed_cache_only",
+      "heldout": "passed_cache_only"
+    },
+    "source_only_AI_references_locked_before_memory_output_export": {
+      "group2_file_sha256": "b5848ee72291a10a12cdda845b665e5f84020f73be61d311c5150f2b0375d77d",
+      "group3_file_sha256": "c7a6048bf862a7aae298716530a8dc1bb1f934775f09a1190e03f3023deb29ab"
+    },
+    "human_completed_forms": 0,
+    "semantic_quality_review": "Separate Diagnostics review; process success does not establish main readiness"
+  },
+  "artifacts": {
+    "local_export": "results/repair-cycle-v3-20261024/run",
+    "server_run": "/mnt/ssd/a.maslov/ai-collusion-sprint/runs/repair-cycle-v3-20261024",
+    "export_manifest": "EXPORT.SHA256SUMS",
+    "export_manifest_sha256": "66e93f38f35649ef4bc2f2aa6db83cb92e3a556ade7564479a8a0fbfb2511f48",
+    "verified_exported_files": 312,
+    "export_exclusions": ["home", "tmp", "checkpoints", "special devices and sockets"],
+    "requests_sha256": "43dac60171efe7eb4e164d09771e67a71c0e0bc70a59b0763dce29b212bab358",
+    "responses_sha256": "f38db1bb603c5ccf19222581569f80da48d56ae2142d8877942526c03d3424e7",
+    "heldout_cache_audit_sha256": "fcd43abdeafaba550e1ef2a4539be84ab120d689126ce4ec66ba0d0d254aa097",
+    "execution_report": "report-62f2a874d7c7317d634a32b03fb09a095612443f/report.json",
+    "execution_report_sha256": "c34da8e256bf09d70ec0e2e7c5ce3381fd7694d9c314703d1db9a1cf8a49f30a"
+  },
+  "cleanup": {
+    "gpu_uuid": "GPU-441e6008-cd27-34b5-c81a-17dad9d4a894",
+    "final_gpu_memory_MiB": 0,
+    "own_stopped_containers_removed": 10,
+    "container_inspects_and_writable_layer_inventory_exported": true,
+    "persistent_results_images_caches_and_ssh_master_preserved": true
+  },
+  "scope_boundary": {
+    "main_started": false,
+    "full_A_B_E_actor_experiment_started": false,
+    "additional_model_calls_after_cycle": false,
+    "next_scientific_stage_requires_separate_owner_decision": true
+  }
+}
