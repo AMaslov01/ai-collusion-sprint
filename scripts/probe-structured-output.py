@@ -19,7 +19,7 @@ from vllm.config.structured_outputs import StructuredOutputsConfig
 def main():
     if os.getuid() == 0 or os.environ.get("CUDA_VISIBLE_DEVICES") != "":
         raise RuntimeError("Requires non-root CPU-only Docker")
-    schemas = ["memory-summary.proposed.json", "memory-extraction.v3.1.json", "memory-verification.v3.json", "memory-policy.proposed.json"]
+    schemas = ["memory-summary.proposed.json", "memory-extraction.v3.1.json", "memory-extraction.v4.json", "memory-verification.v3.json", "memory-policy.proposed.json"]
     result = {"new_model_calls": 0, "gpu_assigned": False,
               "versions": {name: importlib.metadata.version(name) for name in ("vllm", "xgrammar", "transformers")},
               "structured_outputs_config_fields": [item.name for item in fields(StructuredOutputsConfig)],
