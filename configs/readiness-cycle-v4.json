@@ -38,6 +38,16 @@
     "validation_memory": 8,
     "fresh_controlled_fixtures": 32
   },
+  "developmental_memory_matrix": {
+    "known_native_sources": [1, 2, 3],
+    "known_native_S_C_V_P_call_ceiling": 12,
+    "known_fixture_count": 8,
+    "known_V_P_call_ceiling": 16,
+    "structured_capability_probe_calls": 1,
+    "actual_DEV4_5_checkpoint_memory_call_ceiling": 8,
+    "matrix_total_ceiling": 37,
+    "remaining_allocation": "At most 3 separately reviewed stage-specific v2 calls after diagnosis; no automatic retry or new full matrix"
+  },
   "selection": {
     "known_developmental_groups": [1, 2, 3],
     "developmental_nominal_groups": [4],
@@ -58,15 +68,16 @@
       "V": {"prompt": "prompts/memory/verify-v4.txt", "schema": "schemas/memory-verification.v3.json", "max_output_tokens": 8192},
       "P": {"prompt": "prompts/memory/policy-v3.txt", "schema": "schemas/memory-policy.proposed.json", "max_output_tokens": 8192}
     },
-    "source_serialization": "lossless_event_table_v1",
+    "source_serialization": "lossless_event_table_v2",
     "candidate_serialization": "lossless_candidate_table_v1",
     "actor_serialization": "provenance_dictionary_v1",
     "content_cap_tokens": 2048,
+    "archive_wrapper": "[PRIVATE ARCHIVE]\n{content}\n[/PRIVATE ARCHIVE]",
     "source_aliases": "Full source event order before packing; no renumbering after deletion",
     "selection_policy": "Chronological whole-record prefix, no backfill",
     "deletion_policy": "Freeze C dictionary and retained record bytes in CV and CVP",
     "decoder": "strict_JSON_no_prose_recovery_no_repair",
-    "generation": "Same greedy builder sampler as frozen v3",
+    "generation": {"temperature": 0.0, "top_p": 1.0, "top_k": -1, "min_p": 0.0, "presence_penalty": 0.0, "repetition_penalty": 1.0, "seed": 42, "n": 1, "chat_template_kwargs": {"enable_thinking": false}},
     "context_admission": "Fully rendered input plus fixed stage reserve <=32768; otherwise explicit failure",
     "response_format": "json_schema_strict",
     "structured_outputs_backend": "xgrammar"

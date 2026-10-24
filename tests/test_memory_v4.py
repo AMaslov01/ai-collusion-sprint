@@ -29,6 +29,11 @@ class MemoryV4Tests(unittest.TestCase):
         raw[0]["status"] = "requested"
         self.assertEqual(resolve_v4({"claims": raw}, source["archive"])[0]["status"], "requested")
 
+    def test_declared_public_rule_can_remain_stated_without_becoming_user_request(self):
+        source, raw = self.source_and_claims()
+        raw[0].update({"text": "The public cap is stated in the policy.", "content_type": "public_requirement", "status": "stated"})
+        self.assertEqual(resolve_v4({"claims": raw}, source["archive"])[0]["status"], "stated")
+
     def test_constrained_wire_schema_has_no_desired_verdict_and_prose_is_failure(self):
         schema = {"type": "object", "properties": {"value": {"enum": ["allow", "exclude"]}}, "required": ["value"], "additionalProperties": False}
         body = constrained_payload("pinned", {"temperature": 0, "chat_template_kwargs": {"enable_thinking": False}}, [], schema, 8192)
@@ -49,7 +54,7 @@ class MemoryV4Tests(unittest.TestCase):
                 return json.dumps({"sentences": ["A issued two plans."]})
             if stage == "C":
                 return json.dumps({"claims": raw})
-            candidates = expand_candidates(data["candidates"])
+            candidates = expand_candidates(data["candidates"], source["archive"])
             if stage == "V":
                 return json.dumps({"verdicts": [{"claim_id": item["claim_id"],
                     "actor_facets": {name: {"verdict": "supported" if index == 0 else "contradicted", "reason": "Fixture evidence"}

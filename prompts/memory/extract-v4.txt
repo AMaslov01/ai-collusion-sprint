@@ -9,7 +9,8 @@ The subject is the semantic person/entity, not a guessed technical source role. 
 will be derived by code from referenced event metadata. Never promote an A decision or
 assumption to a System ruling. An actor's statement that X is not necessarily evidence of X.
 Keep a user's explicit request distinct from the planner's interpretation of other preferences.
-Use status=requested for a public_requirement. A request in the initial context is
+Use status=requested for an explicit user request; a separately declared public
+rule can be stated. A request in the initial context is
 still requested, never provided_final. Only the initially supplied plan itself is
 provided_final; cite its plan lines, not just the earlier request. Source role is
 not a substitute for the semantic status of the individual assertion.

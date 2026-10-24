@@ -77,6 +77,9 @@ def compact_source(archive):
     require(events, "Empty source archive")
     columns = list(events[0])
     require(all(set(event) == set(columns) for event in events), "Event projection schemas differ")
+    self_origin = all(event["origin_event_id"] == event["event_id"] for event in events)
+    if self_origin:
+        columns.remove("origin_event_id")
     rows = []
     for event in events:
         row = []
@@ -87,27 +90,30 @@ def compact_source(archive):
             row.append(deepcopy(value))
         rows.append(row)
     value = {key: deepcopy(item) for key, item in original.items() if key != "source_events"}
-    value.update({"serialization": "lossless_event_table_v1", "event_columns": columns, "event_rows": rows})
+    value.update({"serialization": "lossless_event_table_v2", "event_columns": columns, "event_rows": rows,
+                  "event_derivations": {"origin_event_id": "event_id"} if self_origin else {}})
     require(expand_source(value) == original, "Source presentation roundtrip failed")
     return value
 
 
 def expand_source(value):
-    require(value["serialization"] == "lossless_event_table_v1", "Unknown source serialization")
+    require(value["serialization"] == "lossless_event_table_v2", "Unknown source serialization")
     columns = value["event_columns"]
     require(len(columns) == len(set(columns)), "Duplicate event column")
-    original = {key: deepcopy(item) for key, item in value.items() if key not in {"serialization", "event_columns", "event_rows"}}
+    original = {key: deepcopy(item) for key, item in value.items() if key not in {"serialization", "event_columns", "event_rows", "event_derivations"}}
     events = []
     for row in value["event_rows"]:
         require(len(row) == len(columns), "Invalid event table row")
         event = dict(zip(columns, deepcopy(row)))
+        for target, source in value["event_derivations"].items():
+            event[target] = deepcopy(event[source])
         event["evidence_lines"] = [{"span_id": span, "text": text} for span, text in event["evidence_lines"]]
         events.append(event)
     original["source_events"] = events
     return original
 
 
-def compact_candidates(claims, archive):
+def compact_candidates(claims, archive, *, shared_source=False):
     if not claims:
         return {"format": "lossless_candidate_table_v1", "columns": [], "rows": [], "sources": []}
     order = [event["event_id"] for event in sorted(archive["events"], key=lambda item: item["order"])]
@@ -126,17 +132,27 @@ def compact_candidates(claims, archive):
         rows.append([encoded[key] for key in columns])
     value = {"format": "lossless_candidate_table_v1", "columns": columns, "rows": rows, "sources": codec.sources}
     require(expand_candidates(value) == claims, "Candidate roundtrip failed")
+    if shared_source:
+        value.pop("sources")
+        value["source_table"] = "same_request_source_events_by_order"
+        require(expand_candidates(value, archive) == claims, "Shared source roundtrip failed")
     return value
 
 
-def expand_candidates(value):
+def expand_candidates(value, archive=None):
     require(value["format"] == "lossless_candidate_table_v1", "Unknown candidate serialization")
-    sources = {alias: (event, digest) for alias, event, digest in value["sources"]}
+    if "source_table" in value:
+        require(archive is not None, "Shared source candidate table needs this request's source archive")
+        source_rows = [[index, event["event_id"], event["content_sha256"]]
+                       for index, event in enumerate(sorted(archive["events"], key=lambda item: item["order"]))]
+    else:
+        source_rows = value["sources"]
+    sources = {alias: (event, digest) for alias, event, digest in source_rows}
     result = []
     for row in value["rows"]:
         require(len(row) == len(value["columns"]), "Invalid candidate table row")
         claim = dict(zip(value["columns"], deepcopy(row)))
-        envelope = {"format": "provenance_dictionary_v1", "sources": value["sources"],
+        envelope = {"format": "provenance_dictionary_v1", "sources": source_rows,
                     "records": [{"text": claim["text"], "source_refs": claim["source_refs"]}]}
         claim["source_refs"] = ProvenanceCodec.decode(envelope)[0]["source_refs"]
         if "source_roles" in claim:

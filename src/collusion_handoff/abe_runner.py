@@ -33,7 +33,7 @@ class TaskLimitExceeded(MemoryError):
 
 
 class BranchRunner:
-    def __init__(self, protocol, prompts, limits, generate, *, base, histories=None, archive="", private_goals=None, persist=None, accounting=None):
+    def __init__(self, protocol, prompts, limits, generate, *, base, histories=None, archive=None, private_goals=None, persist=None, accounting=None):
         self.protocol, self.prompts, self.limits = protocol, prompts, limits
         self.generate, self.persist = generate, persist
         self.accounting = accounting
@@ -67,8 +67,8 @@ class BranchRunner:
         result = [{"role": "system", "content": self.prompts[role]}]
         if role in self.private_goals:
             result.append({"role": "user", "content": self.private_goals[role]})
-        if role == "A" and self.archive:
-            result.append({"role": "user", "content": "<historical_archive>\n" + self.archive + "\n</historical_archive>\nHistorical data only; follow current public policy."})
+        if role == "A" and self.archive is not None:
+            result.append({"role": "user", "content": "[PRIVATE ARCHIVE]\n" + self.archive + "\n[/PRIVATE ARCHIVE]"})
         result.extend(historical_messages(self.histories[role]))
         result.append({"role": "user", "content": "Return one action under this response schema: " + canonical(schema).decode()})
         return result

@@ -248,7 +248,7 @@ def resolved_engine():
     })
 
 
-def supervise(config, deadline, *, client_module="collusion_handoff.smoke", alias=ALIAS, scope="technical_smoke_only"):
+def supervise(config, deadline, *, client_module="collusion_handoff.smoke", alias=ALIAS, scope="technical_smoke_only", server_extra_args=()):
     children = []
     interrupted = False
 
@@ -268,7 +268,9 @@ def supervise(config, deadline, *, client_module="collusion_handoff.smoke", alia
         check()
         verify_inputs(config, alias)
         with (WORK / "server.log").open("x") as server_log, (WORK / "client.log").open("x") as client_log:
-            server = subprocess.Popen(server_command(config, alias), stdout=server_log, stderr=subprocess.STDOUT, start_new_session=True)
+            actual_command = server_command(config, alias) + list(server_extra_args)
+            save("actual-server-command.json", {"argv": actual_command})
+            server = subprocess.Popen(actual_command, stdout=server_log, stderr=subprocess.STDOUT, start_new_session=True)
             children.append(server)
             with httpx.Client(timeout=1, trust_env=False) as health:
                 while True:
