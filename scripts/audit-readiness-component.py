@@ -1,4 +1,4 @@
-"""Cache-only replay of frozen v4 components or v5 checkpoint memory.
+"""Cache-only replay of frozen v4 components or v5 checkpoint/final-DEV memory.
 
 Run in non-root CPU Docker with the completed run mounted read-only. This script
 constructs no HTTP client and never generates responses. Inference code is loaded
@@ -53,12 +53,13 @@ def main():
     output.mkdir(mode=0o700, parents=True)
     phase = read_json(completed / "phase-manifest.json")
     profiles = {"development-memory-v1": "configs/readiness-cycle-v4.json",
-                "development-checkpoint-memory-v1": "configs/readiness-cycle-v5.json"}
+                "development-checkpoint-memory-v1": "configs/readiness-cycle-v5.json",
+                "validation-continuations-v1": "configs/readiness-cycle-v5.json"}
     require(phase["phase"] in profiles, "Unimplemented replay profile")
     config_path = code / profiles[phase["phase"]]
     config = read_json(config_path)
     base = read_json(code / config["base_runtime_config"])
-    if phase["phase"] == "development-checkpoint-memory-v1":
+    if phase["phase"] != "development-memory-v1":
         from collusion_handoff.readiness_cycle import memory_implementation
         message_builder, resolver, full_delivery = memory_implementation(config)
     else:
@@ -220,7 +221,11 @@ def main():
                 "artifacts_compared": len(replayed), "preserved_failure": failure}
 
     def replay_fixture(definition, job):
-        source, candidates = fixture_source(definition)
+        if phase_name == "development-memory-v1":
+            source, candidates = fixture_source(definition)
+        else:
+            from collusion_handoff.readiness_cycle import fixture_input
+            source, candidates = fixture_input(config, definition)
         require(read_json(job / "source.json") == source and read_json(job / "candidates.json") == candidates,
                 "Controlled inputs changed")
         require(read_json(job / "audit-mapping.json") == fixture_mapping(definition, source, candidates),
@@ -231,7 +236,7 @@ def main():
         eligible = fixture_eligible(definition, candidates)
         for stage, selected in (("V", candidates), ("P", eligible)):
             try:
-                messages = messages_v4(stage, source, selected, assets[stage])
+                messages = message_builder(stage, source, selected, assets[stage])
                 body = expected_payload(stage, messages)
                 runtime_require(count_input(body) + body["max_tokens"] <= config["limits"]["context"], "Fixture admission overflow")
                 require(cursor < len(req) and req[cursor]["logical_call_id"].endswith("/" + stage),
@@ -249,6 +254,8 @@ def main():
                 failures[stage] = {"type": type(error).__name__, "message": str(error)}
         actual = read_json(job / "status.json")
         require(set(actual["component_failures"]) == set(failures), "Fixture failed stages differ")
+        require(all(actual["component_failures"][stage]["type"] == failure["type"]
+                    for stage, failure in failures.items()), "Fixture failure types differ")
         require((not failures) == (actual["status"] == "complete"), "Fixture terminal status differs")
         require(cursor == len(req), "Not every fixture request replayed")
         require(actual["component_p_eligible_ids"] == sorted(claim["claim_id"] for claim in eligible), "P domain differs")
@@ -270,6 +277,24 @@ def main():
             require(consumed == actual_phase_ids, "Unconsumed or unexpected checkpoint memory calls")
             require(len(consumed) <= 12, "V5 checkpoint memory call ceiling exceeded")
             return {"status": "passed", "jobs": len(results), "exact_phase_calls_consumed": len(consumed)}
+        if phase_name == "validation-continuations-v1":
+            from collusion_handoff.readiness_cycle import fresh_definitions
+            definitions = fresh_definitions(config)
+            fixture_terminal = read_json(completed / "fixture-phase-status.json")
+            require(set(fixture_terminal["jobs"]) == {"fresh-" + item["fixture_id"] for item in definitions},
+                    "Missing assigned fresh fixture job receipt")
+            for number in config["selection"]["independent_validation_induced_groups"]:
+                key = f"group-{number}"
+                results[key] = replay_memory(completed / "memory" / key)
+            for definition in definitions:
+                key = "fresh-" + definition["fixture_id"]
+                job = completed / "fixtures" / key
+                results[key] = replay_fixture(definition, job)
+                require(read_json(job / "status.json") == fixture_terminal["jobs"][key], "Fresh phase/job receipt differs")
+            actual_component_ids = {key for key in request_map if key.startswith(phase_name + "/")}
+            require(consumed == actual_component_ids, "Unconsumed or unexpected final memory/fixture calls")
+            return {"status": "passed", "jobs": len(results), "exact_component_calls_consumed": len(consumed),
+                    "actor_continuation_replay": "Separate required audit; not covered by this component profile"}
         planned = {f"known-group-{number}" for number in (1, 2, 3)}
         definitions = read_json(code / "fixtures/memory-semantic-v3.json")["fixtures"]
         planned |= {definition["fixture_id"] for definition in definitions}
@@ -300,6 +325,7 @@ def main():
     guard("replay", jobs_audit)
     result = {"status": "passed_cache_only" if not errors else "failed", "phase": phase_name,
               "inference_commit": phase["code_commit"], "audit_code_path": str(Path(__file__).resolve()),
+              "scope": "Memory and controlled components only; actor continuation replay is separate",
               "new_model_calls": 0, "no_HTTP_client_constructed": True,
               "checks": checks, "jobs": results, "errors": errors, "human_gold": False, "main_started": False}
     atomic_json(output / "audit.json", result)
