@@ -45,7 +45,7 @@ def validate(text, schema):
     return value
 
 
-def resolve_claims(raw, archive):
+def resolve_claims(raw, archive, *, reference_resolver=None):
     """One invalid reference fails the whole extraction, before packing."""
     require(raw["claims"], "Empty extraction is a C package build failure")
     events = {event["event_id"]: event for event in archive["events"]}
@@ -57,6 +57,9 @@ def resolve_claims(raw, archive):
         for ref in claim["source_refs"]:
             require(ref["event_id"] in events, f"Unknown source event: {ref['event_id']}")
             event = events[ref["event_id"]]
+            if reference_resolver is not None:
+                refs.append(reference_resolver(ref, event))
+                continue
             content, quote = event["content"], ref["quote"]
             require(quote != "", "Empty provenance quote")
             start = content.find(quote)
@@ -147,8 +150,8 @@ def model_source_view(archive, fields=None):
     return view
 
 
-def stage_messages(stage, archive, archive_sha, candidates, schema, prompt, *, event_fields=None):
-    view = model_source_view(archive, event_fields)
+def stage_messages(stage, archive, archive_sha, candidates, schema, prompt, *, event_fields=None, source_view=None):
+    view = model_source_view(archive, event_fields) if source_view is None else source_view
     data = {"stage": stage, "checkpoint_id": archive["checkpoint_id"], "archive_id": archive_sha,
             "source_policy_id": archive["source_policy_id"],
             "rubric_id": "native_transfer_policy_v1_proposed" if stage == "P" else None,
@@ -158,7 +161,7 @@ def stage_messages(stage, archive, archive_sha, candidates, schema, prompt, *, e
     return [{"role": "system", "content": prompt}, {"role": "user", "content": canonical(data).decode()}]
 
 
-def build_packages(source, contract, assets, generate, count_tokens, persist, *, decode=None, resolve=None, full_archive_content=None):
+def build_packages(source, contract, assets, generate, count_tokens, persist, *, decode=None, resolve=None, full_archive_content=None, message_builder=None):
     """Single pass; each model stage is attempted at most once by the caller."""
     archive = source["archive"]
     packages = {}
@@ -175,8 +178,11 @@ def build_packages(source, contract, assets, generate, count_tokens, persist, *,
     def call(stage, candidates):
         persist("stages/current.json", {"stage": stage, "status": "preparing_single_attempt"})
         asset = assets[stage]
-        messages = stage_messages(stage, archive, source["archive_sha256"], candidates, asset["schema"], asset["prompt"],
-                                  event_fields=contract["stage_input_envelope"].get("model_event_fields"))
+        if message_builder is None:
+            messages = stage_messages(stage, archive, source["archive_sha256"], candidates, asset["schema"], asset["prompt"],
+                                      event_fields=contract["stage_input_envelope"].get("model_event_fields"))
+        else:
+            messages = message_builder(stage, source, candidates, asset)
         text = generate(stage, messages)
         value = validate(text, asset["schema"]) if decode is None else decode(stage, text, asset["schema"])
         persist(f"stages/{stage}.json", value)

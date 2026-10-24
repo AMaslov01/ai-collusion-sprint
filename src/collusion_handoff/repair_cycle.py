@@ -21,7 +21,7 @@ from .memory import apply_verdicts, build_packages, require, stage_messages
 from .memory_format import decode_format
 from .memory_runner import source_first, tokenizer
 from .memory_source import build_source
-from .memory_v3 import decoder_v3, derive_verification, fixture_source, full_delivery, resolve_v3
+from .memory_v3 import decoder_v3, fixture_source, full_delivery, resolve_v31, messages_v31, fixture_eligible, fixture_mapping
 from .model_gateway import WireJournal, install_native_actor_gateway
 from .native_adapter import NativeBudget, MeteredClient, ObservedExecutor, install_data, make_agent, policy_for
 from .native_data import base_actor_view, task_actor_view
@@ -106,7 +106,7 @@ def memory_job(source, job, label, allocation, contract, assets, budget, tokens)
 
     try:
         summary = build_packages(source, contract, assets, generate, lambda text: len(tokens.encode(text, add_special_tokens=False)),
-                                 persist, decode=decoder_v3(persist), resolve=resolve_v3, full_archive_content=full_delivery)
+                                 persist, decode=decoder_v3(persist), resolve=resolve_v31, full_archive_content=full_delivery, message_builder=messages_v31)
         atomic_json(job / "status.json", {"status": "built", "summary": summary, "human_gold": False})
     except Exception:
         atomic_json(job / "status.json", {"status": "failed", "traceback": traceback.format_exc(), "hidden_semantic_repair": False})
@@ -257,32 +257,40 @@ def fixture_job(definition, contract, assets, budget):
     source, candidates = fixture_source(definition)
     atomic_json(job / "source.json", source)
     atomic_json(job / "candidates.json", candidates)
+    atomic_json(job / "audit-mapping.json", fixture_mapping(definition, source, candidates))
     atomic_json(job / "assets.json", assets)
     persist = lambda name, value: atomic_json(job / "automatic-withheld" / name, value)
     decode = decoder_v3(persist)
 
     def call(stage, values):
-        messages = stage_messages(stage, source["archive"], source["archive_sha256"], values, assets[stage]["schema"], assets[stage]["prompt"],
-                                  event_fields=contract["stage_input_envelope"]["model_event_fields"])
-        raw = content_of(budget.dispatch(payload_for(stage, messages, contract), identity + "/" + stage, "semantic_fixtures", job=job))
+        messages = messages_v31(stage, source, values, assets[stage])
+        raw = content_of(budget.dispatch(payload_for(stage, messages, contract), source["archive"]["checkpoint_id"] + "/" + stage, "semantic_fixtures", job=job))
         result = decode(stage, raw, assets[stage]["schema"])
         persist(f"stages/{stage}.json", result)
         return result
+    supported_ids, allowed_ids = None, None
+    failures, errors, p_errors = {}, [], []
+    eligible = fixture_eligible(definition, candidates)
+    eligible_ids = {claim["claim_id"] for claim in eligible}
     try:
         verification = call("V", candidates)
         supported, errors = apply_verdicts(candidates, verification["verdicts"], field="verdict", retain="supported")
-        eligible_ids = {identity + "/" + alias for alias in definition["P_eligible"]}
-        eligible = [claim for claim in candidates if claim["claim_id"] in eligible_ids]
+        supported_ids = {item["claim_id"] for item in supported}
+    except Exception:
+        failures["V"] = traceback.format_exc()
+    # Reference eligibility makes P a separate component test even if V was malformed.
+    try:
         policy = call("P", eligible)
         allowed, p_errors = apply_verdicts(eligible, policy["verdicts"], field="label", retain="allow")
-        supported_ids = {item["claim_id"] for item in supported}
-        atomic_json(job / "status.json", {"status": "complete", "component_p_eligible_ids": sorted(eligible_ids),
-                    "actual_v_supported_ids": sorted(supported_ids), "component_p_allowed_ids": [item["claim_id"] for item in allowed],
-                    "e2e_retained_reference_eligible_ids": [item["claim_id"] for item in allowed if item["claim_id"] in supported_ids],
-                    "off_support_v_accepts_without_p_test": sorted(supported_ids - eligible_ids), "V_errors": errors, "P_errors": p_errors,
-                    "natural_end_to_end_population_effect": "not_estimated_controlled_component_fixture"})
+        allowed_ids = {item["claim_id"] for item in allowed}
     except Exception:
-        atomic_json(job / "status.json", {"status": "failed", "traceback": traceback.format_exc()})
+        failures["P"] = traceback.format_exc()
+    atomic_json(job / "status.json", {"status": "complete" if not failures else "partial_component_failure", "component_failures": failures,
+                "component_p_eligible_ids": sorted(eligible_ids), "actual_v_supported_ids": None if supported_ids is None else sorted(supported_ids),
+                "component_p_allowed_ids": None if allowed_ids is None else sorted(allowed_ids),
+                "e2e_retained_reference_eligible_ids": None if supported_ids is None or allowed_ids is None else sorted(supported_ids & allowed_ids),
+                "off_support_v_accepts_without_p_test": None if supported_ids is None else sorted(supported_ids - eligible_ids),
+                "V_errors": errors, "P_errors": p_errors, "natural_end_to_end_population_effect": "not_estimated_controlled_component_fixture"})
 
 
 def run_client():
@@ -330,10 +338,10 @@ def checks():
     for definition in definitions["fixtures"]:
         _, claims = fixture_source(definition)
         require(len(claims) == len(definition["candidates"]), "Fixture candidates deduplicated unexpectedly")
-        require({definition["fixture_id"] + "/" + alias for alias in definition["P_eligible"]} <= {item["claim_id"] for item in claims}, "Unknown fixture P ID")
+        require(len(fixture_eligible(definition, claims)) == len(definition["P_eligible"]), "Unknown fixture P ID")
     counts = {}
     for stage in ("S", "C"):
-        messages = stage_messages(stage, source["archive"], source["archive_sha256"], [], assets[stage]["schema"], assets[stage]["prompt"], event_fields=contract["stage_input_envelope"]["model_event_fields"])
+        messages = messages_v31(stage, source, [], assets[stage])
         ids = tokens.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, enable_thinking=False, return_dict=False)
         require(isinstance(ids, list) and all(type(item) is int for item in ids), "Tokenizer returned unexpected type")
         counts[stage] = len(ids)

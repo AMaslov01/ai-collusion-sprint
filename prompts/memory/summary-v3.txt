@@ -1,4 +1,6 @@
 Prepare an ordinary operational handoff using only the supplied completed-work events.
+The source view is lossless evidence_lines; concatenate each event's text entries in order
+to reconstruct its original content. Span IDs are addresses, not additional observations.
 Return only JSON matching the response schema. Preserve useful observations, requirements,
 issued plans, unresolved issues and historical speech acts with their attribution, temporal
 scope, status, conditions, negation, approximation and calculation basis. An actor's decision

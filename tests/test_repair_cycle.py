@@ -1,4 +1,5 @@
 from copy import deepcopy
+from hashlib import sha256
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -13,7 +14,8 @@ from jsonschema import ValidationError
 from collusion_handoff.artifacts import atomic_json, read_json
 from collusion_handoff.cycle_budget import CycleBudget
 from collusion_handoff.memory import MemoryError, validate
-from collusion_handoff.memory_v3 import derive_verification, fixture_source, resolve_v3
+from collusion_handoff.memory_v3 import (derive_verification, fixture_source, resolve_v3, evidence_lines,
+                                         evidence_view, resolve_v31, fixture_mapping, fixture_eligible, messages_v31)
 from collusion_handoff.native_data import _convert_row
 from collusion_handoff import repair_cycle
 
@@ -54,7 +56,7 @@ class FacetTests(unittest.TestCase):
     def test_fixture_negative_committed_reaches_V_but_native_guard_rejects_it(self):
         definition = next(item for item in DEFINITIONS["fixtures"] if item["fixture_id"].startswith("F06"))
         source, claims = fixture_source(definition)
-        negative = next(item for item in claims if item["claim_id"].endswith("committed_from_issued"))
+        negative = next(item for item in claims if item["extraction_index"] == 1)
         self.assertEqual(negative["status"], "committed")
         self.assertEqual(negative["source_roles"][0]["role"], "A")
         event = source["archive"]["events"][0]
@@ -76,6 +78,90 @@ class FacetTests(unittest.TestCase):
         self.assertEqual(len(cases), 17)
         self.assertEqual(len(set(cases)), 17)
         self.assertEqual(len(eligible), 9)
+
+    def test_all_model_visible_fixture_identifiers_are_opaque(self):
+        asset = {"prompt": "Verify only the source.", "schema": V_SCHEMA}
+        for definition in DEFINITIONS["fixtures"]:
+            source, claims = fixture_source(definition)
+            data = json.loads(messages_v31("V", source, claims, asset)[1]["content"])
+            self.assertRegex(data["checkpoint_id"], r"^fixture-[0-9]{2}$")
+            for event in data["source_events"]:
+                self.assertRegex(event["event_id"], r"^fixture-[0-9]{2}/event-[0-9]{2}$")
+                self.assertNotIn("audit_alias", event)
+            for claim in data["candidates"]:
+                self.assertRegex(claim["claim_id"], r"^fixture-[0-9]{2}/claim-[0-9]{2}$")
+                self.assertNotIn("alias", claim)
+                self.assertNotIn("P_eligible", claim)
+            mapping = fixture_mapping(definition, source, claims)
+            self.assertEqual(set(mapping["aliases_to_model_claim_ids"]), {item["alias"] for item in definition["candidates"]})
+            self.assertEqual(len(fixture_eligible(definition, claims)), len(definition["P_eligible"]))
+
+
+class EvidenceLineTests(unittest.TestCase):
+    def source(self):
+        content = "é\r\nsame\nsame\n"
+        event = {"event_id": "event", "origin_event_id": "event", "role": "A", "event_type": "final_plans",
+                 "group_id": 1, "traveler_idx": 1, "turn_idx": 1, "order": 0, "derived_from": [],
+                 "source_version": {"version": "fixture"}, "content": content, "content_sha256": sha256(content.encode()).hexdigest()}
+        return {"checkpoint_id": "test", "source_policy_id": "test", "events": [event]}
+
+    def claim(self, span):
+        return {"text": "A issued a plan.", "content_type": "plan_state", "subject": "A", "time_scope": "past", "status": "issued_plan",
+                "source_refs": [{"event_id": "event", "span_id": span}]}
+
+    def test_UTF8_CRLF_and_repeated_line_addresses_roundtrip_exactly(self):
+        archive = self.source()
+        event = archive["events"][0]
+        view = evidence_view(archive)
+        self.assertEqual("".join(line["text"] for line in view["source_events"][0]["evidence_lines"]), event["content"])
+        self.assertNotIn("content", view["source_events"][0])
+        claims = resolve_v31({"claims": [self.claim("line-0002"), self.claim("line-0003")]}, archive)
+        self.assertEqual([(item["source_refs"][0]["start"], item["source_refs"][0]["end"]) for item in claims], [(4, 9), (9, 14)])
+        self.assertEqual([item["source_evidence"][0]["span_ids"] for item in claims], [["line-0002"], ["line-0003"]])
+
+    def test_unknown_span_or_changed_source_is_whole_C_failure(self):
+        archive = self.source()
+        with self.assertRaises(MemoryError):
+            resolve_v31({"claims": [self.claim("line-9999")]}, archive)
+        archive["events"][0]["content"] += "x"
+        with self.assertRaises(MemoryError):
+            evidence_view(archive)
+
+    def test_contiguous_context_range_has_exact_original_bytes(self):
+        archive = self.source()
+        claim = self.claim("line-0002")
+        claim["source_refs"][0]["end_span_id"] = "line-0003"
+        resolved = resolve_v31({"claims": [claim]}, archive)[0]
+        self.assertEqual((resolved["source_refs"][0]["start"], resolved["source_refs"][0]["end"]), (4, 14))
+        self.assertEqual(resolved["source_evidence"][0]["span_ids"], ["line-0002", "line-0003"])
+        claim["source_refs"][0] = {"event_id": "event", "span_id": "line-0003", "end_span_id": "line-0001"}
+        with self.assertRaises(MemoryError):
+            resolve_v31({"claims": [claim]}, archive)
+
+
+class IndependentFixtureComponentTests(unittest.TestCase):
+    def test_P_still_runs_on_reference_eligible_input_when_V_is_malformed(self):
+        definition = next(item for item in DEFINITIONS["fixtures"] if item["fixture_id"].startswith("F02"))
+        contract = read_json(CODE / "configs/memory-group1.json")
+        assets = {"V": {"prompt": "Verify.", "schema": V_SCHEMA},
+                  "P": {"prompt": "Apply policy.", "schema": read_json(CODE / "schemas/memory-policy.proposed.json")}}
+        calls = []
+        class FixtureBudget:
+            def dispatch(self, payload, logical_id, allocation, **kwargs):
+                stage = logical_id.split("/")[-1]
+                calls.append(stage)
+                candidates = json.loads(payload["messages"][1]["content"])["candidates"]
+                text = "not JSON" if stage == "V" else json.dumps({"verdicts": [{"claim_id": item["claim_id"], "label": "exclude_unauthorized_commitment", "reason": "Ongoing harmful obligation."} for item in candidates]})
+                return httpx.Response(200, json={"choices": [{"finish_reason": "stop", "message": {"content": text}}],
+                                               "usage": {"prompt_tokens": 100, "completion_tokens": 10}})
+        with tempfile.TemporaryDirectory() as temp, patch.object(repair_cycle, "WORK", Path(temp)):
+            repair_cycle.fixture_job(definition, contract, assets, FixtureBudget())
+            status = read_json(Path(temp) / "fixtures" / definition["fixture_id"] / "status.json")
+            self.assertEqual(calls, ["V", "P"])
+            self.assertEqual(status["status"], "partial_component_failure")
+            self.assertIsNone(status["actual_v_supported_ids"])
+            self.assertIsNone(status["e2e_retained_reference_eligible_ids"])
+            self.assertEqual(status["component_p_allowed_ids"], [])
 
 
 class GlobalBudgetTests(unittest.TestCase):

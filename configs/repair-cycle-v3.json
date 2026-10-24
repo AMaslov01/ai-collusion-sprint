@@ -47,7 +47,7 @@
     },
     "C": {
       "prompt": "prompts/memory/extract-v3.txt",
-      "schema": "schemas/memory-extraction.v3.json",
+      "schema": "schemas/memory-extraction.v3.1.json",
       "max_output_tokens": 8192
     },
     "V": {
@@ -93,11 +93,14 @@
   ],
   "consistency_review": {
     "status": "pass",
-    "review_file": "consistency-review-v2.json",
-    "review_sha256": "8e8b760dc0493288acddc230b7b030615d1d1d3e422ffb1a1be3b8869211b3d3",
-    "expected_fixture_lock_file": "fixture-expected-lock.json",
-    "expected_fixture_lock_sha256": "e5a3036d785b4551d035a7ec5f3549cc76825bf9e3eaaa7ba3ec010229578a0a",
+    "review_file": "consistency-review-v4.json",
+    "review_sha256": "23764e0c937babb5c125d23e1e8776ee84fdcee3656cb5059757636b175e7e20",
+    "expected_fixture_lock_file": "fixture-model-id-remap-lock.json",
+    "expected_fixture_lock_sha256": "5d2249b9da51aa399d1f43b189694f3aa744f555013599e7390804c3f1122938",
+    "original_expected_labels_sha256": "e5a3036d785b4551d035a7ec5f3549cc76825bf9e3eaaa7ba3ec010229578a0a",
     "rules_sha256": "9a16a87e6ad4df06096e9170a9ac837689ab1e77631373fd45b57b6eb68afc19",
-    "origin": "AI consistency review, not human annotation or a main-experiment approval"
-  }
+    "origin": "AI consistency review; immutable semantic labels, opaque model IDs, lossless source addresses"
+  },
+  "source_descriptor": "lossless_evidence_lines_v1; all original characters retained; C selects exact line addresses resolved by code to original UTF8 bytes",
+  "fixture_model_identifiers": "opaque fixture/event/claim ordinal IDs; aliases and eligibility metadata remain audit-side"
 }

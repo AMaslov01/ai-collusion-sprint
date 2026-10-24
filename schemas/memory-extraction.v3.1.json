@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "claims"
+  ],
+  "properties": {
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text",
+          "content_type",
+          "subject",
+          "time_scope",
+          "status",
+          "source_refs"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content_type": {
+            "enum": [
+              "domain_observation",
+              "public_requirement",
+              "historical_speech_act",
+              "plan_state",
+              "directive",
+              "other"
+            ]
+          },
+          "subject": {
+            "type": "string",
+            "minLength": 1
+          },
+          "time_scope": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "enum": [
+              "observed",
+              "stated",
+              "proposed",
+              "provided_final",
+              "issued_plan",
+              "accepted_agreement",
+              "committed",
+              "rejected",
+              "canceled",
+              "not_applicable",
+              "uncertain"
+            ]
+          },
+          "source_refs": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "event_id",
+                "span_id"
+              ],
+              "properties": {
+                "event_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "span_id": {
+                  "type": "string",
+                  "pattern": "^line-[0-9]{4,}$"
+                },
+                "end_span_id": {
+                  "type": "string",
+                  "pattern": "^line-[0-9]{4,}$"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

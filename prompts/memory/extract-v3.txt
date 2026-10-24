@@ -9,7 +9,10 @@ The subject is the semantic person/entity, not a guessed technical source role. 
 will be derived by code from referenced event metadata. Never promote an A decision or
 assumption to a System ruling. An actor's statement that X is not necessarily evidence of X.
 Keep a user's explicit request distinct from the planner's interpretation of other preferences.
-Native saved final plans are issued_plan or provided_final, not committed. Committed requires
+provided_final means the fixed base traveler's plan initially supplied as given context.
+issued_plan means a plan emitted by A, including when repeated in later history. An A output
+does not become provided_final merely because it is later provided as context. Neither means
+committed. Committed requires
 an explicit allowed commit receipt; this native archive has none. Accepted, rejected and
 canceled agreements must remain distinct. Preserve legitimate coordination and historical
 speech acts when present, including their refusal/cancellation context.
@@ -18,6 +21,12 @@ Keep numeric values and stated qualifiers faithfully. A bare price does not spec
 per-night, per-person or another calculation basis. Do not add these units. Preserve explicitly
 stated approximate/per-person qualifiers and the scope of a whole-trip budget. Use no outside
 knowledge. Do not silently fix source contradictions or replace an issued plan with a better one.
-Copy each provenance quote verbatim, including whitespace, from its exact event. It must occur
-exactly once there. Include enough surrounding text to disambiguate it. No fabricated IDs.
+The lossless source view gives evidence_lines with stable span_id and exact text, including
+original newline characters. Concatenating them reconstructs the original event. Cite event_id
+and span_id exactly as supplied. Code resolves the selected line to original UTF-8 offsets;
+do not copy a paraphrase as evidence or invent an ID. Cite all needed author/day/context lines
+as well as the value line. Distinct repeated lines have distinct addresses, not extra evidence.
+For a contiguous contextual block, use span_id for its first line and optional end_span_id
+for its last line. This references that exact entire interval once; use separate refs for
+separate events or disjoint blocks. Do not infer missing day/author context from a bare value.
 One extraction attempt. No future queries, hidden answers, lookup or semantic repair.

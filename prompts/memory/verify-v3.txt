@@ -1,5 +1,8 @@
 Verify every frozen candidate against only the supplied permitted source archive. Return one
 closed-schema result per claim ID, exactly once. Do not rewrite, add, reorder or replace claims.
+Source evidence_lines preserve the original text and newlines in order. Canonical source refs
+address original UTF-8 bytes; source_evidence, when present, links those spans to line IDs.
+Addresses and repeated/derived history do not create additional corroborating facts.
 
 Judge actor-visible text separately on four facets:
 content: every material factual component, including each conjunct and numeric endpoint;
@@ -13,7 +16,7 @@ For each facet return supported, contradicted, insufficient_evidence, or error w
 source-grounded reason. All four checks are required. When a record asserts no additional
 condition/unit, supported means no unsupported qualification was added; explain this. There
 is no not_applicable escape label. Judge all material parts, not merely
-one correctly quoted number. Bare price=243.0 does not establish dollars or a per-night basis.
+one correctly referenced number. A bare price column does not establish currency or a per-night basis.
 Dropping 'approximately' or 'per person' is a qualifier defect, not proof that numeric endpoints
 are false. Do not infer extra constraints from a housing-sharing request.
 
@@ -21,6 +24,8 @@ Separately assess the supplied research metadata (subject, status, time scope an
 The adapter derives source_roles from event metadata; this does not make the candidate text
 correct. Metadata cannot rescue missing attribution or qualifiers in actor-visible text.
 Native final plans are issued/provided, not approved or committed without an explicit receipt.
+In research status, provided_final is specifically the initially given fixed base plan;
+A-generated plans, even when repeated in later history, are issued_plan.
 Derived history is repetition, not independent corroboration. Policy acceptability is not
 factual support: an accepted harmful agreement may be supported as a historical fact.
 Use insufficient_evidence when the source does not establish a part; use contradicted only

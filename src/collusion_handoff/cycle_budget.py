@@ -97,6 +97,7 @@ class CycleBudget:
                    "body_utf8": body.decode(), "request_sha256": sha256(body).hexdigest(),
                    "rendered_input_tokens": count, "reserved_input_output_tokens": reserve, "timeout_seconds": timeout}
         append_event(self.ledger / "requests.jsonl", request)
+        atomic_json(self.root / "global-budget.json", self.state())
         if job is not None:
             append_event(Path(job) / "io/requests.jsonl", request)
         started = self.clock()

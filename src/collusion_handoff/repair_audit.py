@@ -9,7 +9,7 @@ import httpx
 from .artifacts import atomic_json, fingerprint, read_json
 from .cycle_budget import CycleBudget
 from .memory import apply_verdicts, build_packages, require, stage_messages, strict_json
-from .memory_v3 import decoder_v3, fixture_source, full_delivery, resolve_v3
+from .memory_v3 import decoder_v3, fixture_source, full_delivery, resolve_v31, messages_v31, fixture_eligible
 from .repair_cycle import BASE_CONFIG, CODE, ROOT, WORK, content_of, payload_for, replay_native, settings
 from .memory_runner import tokenizer
 
@@ -42,8 +42,8 @@ def replay_memory(job, contract, assets, tokens):
     failure = None
     try:
         build_packages(source, contract, assets, cached, lambda text: len(tokens.encode(text, add_special_tokens=False)),
-                       replayed.__setitem__, decode=decoder_v3(replayed.__setitem__), resolve=resolve_v3,
-                       full_archive_content=full_delivery)
+                       replayed.__setitem__, decode=decoder_v3(replayed.__setitem__), resolve=resolve_v31,
+                       full_archive_content=full_delivery, message_builder=messages_v31)
     except Exception as error:
         failure = {"type": type(error).__name__, "message": str(error)}
     actual = read_json(job / "status.json")
@@ -68,30 +68,34 @@ def replay_fixture(definition, job, contract, assets):
         nonlocal cursor
         require(cursor < len(requests), "Fixture admission failure preserved")
         request, response = requests[cursor], responses[cursor]
+        require(request["logical_call_id"].endswith("/" + stage), "Unrecorded component admission failure")
         cursor += 1
-        messages = stage_messages(stage, source["archive"], source["archive_sha256"], claims, assets[stage]["schema"], assets[stage]["prompt"],
-                                  event_fields=contract["stage_input_envelope"]["model_event_fields"])
+        messages = messages_v31(stage, source, claims, assets[stage])
         require(strict_json(request["body_utf8"]) == payload_for(stage, messages, contract), "Fixture replay wire differs")
         require(response.get("status_code") == 200, "Cached fixture transport/HTTP failure")
         value = decode(stage, content_of(httpx.Response(200, content=response["body_utf8"].encode())), assets[stage]["schema"])
         replayed[f"stages/{stage}.json"] = value
         return value
 
-    failure = None
+    failures = {}
     try:
         verification = cached("V", candidates)
         supported, _ = apply_verdicts(candidates, verification["verdicts"], field="verdict", retain="supported")
-        eligible = [item for item in candidates if item["claim_id"].split("/")[-1] in definition["P_eligible"]]
+    except Exception as error:
+        failures["V"] = {"type": type(error).__name__, "message": str(error)}
+    eligible = fixture_eligible(definition, candidates)
+    try:
         policy = cached("P", eligible)
         apply_verdicts(eligible, policy["verdicts"], field="label", retain="allow")
     except Exception as error:
-        failure = {"type": type(error).__name__, "message": str(error)}
+        failures["P"] = {"type": type(error).__name__, "message": str(error)}
     actual = read_json(job / "status.json")
-    require((failure is None) == (actual["status"] == "complete"), "Fixture replay success/failure differs")
+    require((not failures) == (actual["status"] == "complete"), "Fixture replay success/failure differs")
+    require(set(failures) == set(actual.get("component_failures", {})), "Fixture failed components differ")
     require(cursor == len(requests), "Fixture replay did not consume exact cache")
     for name, value in replayed.items():
         require(read_json(job / "automatic-withheld" / name) == value, "Fixture replay artifact differs")
-    return {"status": "passed_cache_only", "cached_calls": cursor, "preserved_failure_boundary": failure, "new_model_calls": 0}
+    return {"status": "passed_cache_only", "cached_calls": cursor, "preserved_component_failures": failures, "new_model_calls": 0}
 
 
 def main():
