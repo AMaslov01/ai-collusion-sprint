@@ -1,8 +1,8 @@
 """Replay frozen H100 hardware/development or final-DEV prefix response caches.
 
 Non-root CPU Docker only; no model client or network calls. Load the original
-inference checkout explicitly. Memory and continuation phases need their own
-replay profiles and are rejected here until those profiles are implemented.
+inference checkout explicitly. Memory/fixture calls require the separate component
+audit. Actor continuation branches are replayed through the production fork runner.
 """
 
 import argparse
@@ -13,6 +13,7 @@ from pathlib import Path
 import sys
 import traceback
 from unittest.mock import patch
+from types import SimpleNamespace
 
 
 def main():
@@ -55,14 +56,16 @@ def main():
         return [strict_json(line) for line in data.decode().splitlines()]
 
     phase = read_json(completed / "phase-manifest.json")
-    require(phase["phase"] in {"hardware-and-development-prefix-v1", "validation-prefix-v1"},
+    require(phase["phase"] in {"hardware-and-development-prefix-v1", "validation-prefix-v1", "validation-continuations-v1"},
             "Unimplemented replay profile; do not claim a pass")
     development = phase["phase"] == "hardware-and-development-prefix-v1"
+    continuation = phase["phase"] == "validation-continuations-v1"
     config = read_json(code / "configs/readiness-cycle-v5.json")
     base = read_json(code / config["base_runtime_config"])
     selected = (config["selection"]["developmental_nominal_groups"] + config["selection"]["developmental_induced_groups"]
                 if development else config["selection"]["independent_validation_induced_groups"])
-    actor_prefixes = tuple(abe_cycle.namespace(config["run_id"], number, "prefix") + "/" for number in selected)
+    actor_prefixes = tuple(abe_cycle.namespace(config["run_id"], number, role) + "/" for number in selected
+                           for role in (["recipient/" + arm for arm in config["selection"]["arms"]] if continuation else ["prefix"]))
     require(phase["config_sha256"] == sha256((code / "configs/readiness-cycle-v5.json").read_bytes()).hexdigest(), "Inference config changed")
     assets = {stage: {"prompt": (code / spec["prompt"]).read_text(), "schema": read_json(code / spec["schema"])}
               for stage, spec in config["memory"]["stages"].items()}
@@ -215,8 +218,75 @@ def main():
         return {"status": "passed", "tasks_replayed": len(replayed_results), "assigned_tasks": len(saved_results),
                 "source_archive_sha256": source["archive_sha256"], "world_state_sha256": fingerprint(protocol.commits)}
 
+    def continuations(number):
+        prefix_job = cycle / "validation-prefix-v1/prefix" / f"group-{number}"
+        actual = completed / "continuations" / f"group-{number}"
+        require(read_json(actual / "status.json")["failure"] is None,
+                "Fatal continuation boundary needs a separately reviewed partial-phase replay")
+        registry = read_json(prefix_job / "private-registry-bound.json")
+        packages = {path.stem: read_json(path) for path in
+                    (completed / "memory" / f"group-{number}" / "automatic-withheld/packages").glob("*.json")}
+        replay_work = output / "actor-replay"
+        replay_work.mkdir(exist_ok=True)
+
+        def factory(selected_config, selected_base, budget, job, allocation, **kwargs):
+            require(selected_config == config and selected_base == base and allocation == "validation_actors",
+                    "Continuation generator profile changed")
+            actual_job = actual / job.name
+            saved = {task["task_id"]: read_json(actual_job / "results" / (task["task_id"] + ".json"))
+                     for task in registry["tasks"][2:]}
+            def generate(role, messages, schema, logical_id, deadline, remaining):
+                body = constrained_payload("qwen-native-dev", actor_sampler, messages, schema, config["limits"]["actor_max_output_tokens"])
+                if logical_id not in by_request:
+                    failed = saved[logical_id.split("/")[1]]
+                    detail = failed.get("failure") or {}
+                    if detail.get("type") == "AdmissionFailure":
+                        raise AdmissionFailure(detail["message"], kind=detail["kind"], stop_phase=failed["status"] == "phase_stopped")
+                    raise AuditMismatch("No cached continuation and no declared admission failure")
+                response = cached_response(body, logical_id, actual_job)
+                text, usage = readiness_cycle.content(response), response.json()["usage"]
+                require(usage["prompt_tokens"] + body["max_tokens"] <= remaining, "Continuation task reserve differs")
+                return {"text": text, "input_tokens": usage["prompt_tokens"], "output_tokens": usage["completion_tokens"]}
+            return generate
+
+        with patch.object(abe_cycle, "actor_generator", factory), patch.object(abe_cycle, "load_prompts", lambda _: prompts):
+            replay_group = abe_cycle.continue_group(prefix_job, packages, config, base,
+                SimpleNamespace(ledger=cycle / "ledger"), replay_work, group_registry=registry, catalog=catalog)
+        actual_files = {str(path.relative_to(actual)) for path in actual.rglob("*.json")}
+        replay_files = {str(path.relative_to(replay_group)) for path in replay_group.rglob("*.json")}
+        require(actual_files == replay_files, "Continuation artifact inventory differs")
+        for name in sorted(actual_files):
+            require(read_json(actual / name) == read_json(replay_group / name), "Continuation artifact differs: " + name)
+        for arm in config["selection"]["arms"]:
+            branch = abe_cycle.namespace(config["run_id"], number, "recipient/" + arm)
+            require(rows(actual / branch / "events.jsonl") == rows(replay_group / branch / "events.jsonl"),
+                    "Continuation append-only branch events differ")
+        return {"status": "passed", "artifacts_compared": len(actual_files),
+                "assigned_opportunities": len(config["selection"]["arms"]) * 2,
+                "real_fork_runner": True, "new_model_calls": 0}
+
     for number in selected:
-        check(f"prefix-{number}", lambda number=number: prefix(number))
+        operation = continuations if continuation else prefix
+        check(f"group-{number}", lambda number=number: operation(number))
+    if continuation:
+        def assigned_audit():
+            assigned = read_json(completed / "assigned-future-opportunities.json")
+            expected = {(number, arm, index) for number in selected for arm in config["selection"]["arms"] for index in (3, 4)}
+            require(len(assigned) == len(expected) and {(row["group_id"], row["arm"], row["traveler_index"]) for row in assigned} == expected,
+                    "Frozen assigned continuation matrix differs")
+            aggregate = read_json(completed / "all-assigned-results.json")
+            require(aggregate["assigned"] == len(expected) and len(aggregate["observed"]) == len(expected), "Assigned aggregate denominator differs")
+            observed = set()
+            for row in aggregate["observed"]:
+                key = (row["group_id"], row["arm"], row["traveler_index"])
+                require(key in expected and key not in observed, "Assigned aggregate missing/duplicate identity")
+                observed.add(key)
+                require(row["task_id"] == f"g{row['group_id']}-t{row['traveler_index']}", "Aggregate task/index binding differs")
+                branch = abe_cycle.namespace(config["run_id"], row["group_id"], "recipient/" + row["arm"])
+                result = read_json(completed / "continuations" / f"group-{row['group_id']}" / branch / "results" / (row["task_id"] + ".json"))
+                require(row["result"] == result, "Assigned aggregate result differs from replayed result")
+            return {"status": "passed", "all_assigned": len(expected)}
+        check("all-assigned", assigned_audit)
     if consumed != phase_ids:
         errors.append({"check": "exact_cache_consumption", "unconsumed": sorted(phase_ids - consumed), "extra": sorted(consumed - phase_ids)})
     if unknown:
@@ -224,6 +294,7 @@ def main():
     report = {"status": "passed_cache_only" if not errors else "failed", "phase": phase["phase"],
               "inference_commit": phase["code_commit"], "new_model_calls": 0, "no_HTTP_client_constructed": True,
               "all_v5_calls": len(requests), "phase_calls_replayed": len(consumed), "tokens": tokens,
+              "scope": "Actor calls only; memory and controlled components require separate audit",
               "allocations": allocations, "unknown_spend_requests": unknown, "checks": results, "errors": errors,
               "hardware": config["operations"], "parent_runs": config["parent_runs"], "main_started": False,
               "human_gold": False}
