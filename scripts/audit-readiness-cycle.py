@@ -64,6 +64,12 @@ def main():
     base = read_json(code / config["base_runtime_config"])
     selected = (config["selection"]["developmental_nominal_groups"] + config["selection"]["developmental_induced_groups"]
                 if development else config["selection"]["independent_validation_induced_groups"])
+    smoke_spec = config.get("resource_smoke")
+    smoke_spec = smoke_spec if smoke_spec and smoke_spec["phase"] == phase["phase"] else None
+    hardware_active = development or smoke_spec is not None
+    hardware_job = smoke_spec["job_name"] if smoke_spec else "hardware-smoke"
+    hardware_allocation = smoke_spec["allocation"] if smoke_spec else "hardware_smoke"
+    hardware_prefix = smoke_spec["logical_prefix"] + "/" if smoke_spec else "hardware-and-development-prefix-v1/"
     actor_prefixes = tuple(abe_cycle.namespace(config["run_id"], number, role) + "/" for number in selected
                            for role in (["recipient/" + arm for arm in config["selection"]["arms"]] if continuation else ["prefix"]))
     require(phase["config_sha256"] == sha256((code / "configs/readiness-cycle-v5.json").read_bytes()).hexdigest(), "Inference config changed")
@@ -100,9 +106,9 @@ def main():
                     and 0 <= usage["completion_tokens"] <= body["max_tokens"]
                     and receipt["accounted_actual_tokens"] == usage["prompt_tokens"] + usage["completion_tokens"], "Raw usage does not match accounted tokens")
             tokens += receipt["accounted_actual_tokens"]
-        if identity.startswith(actor_prefixes) or (development and allocation == "hardware_smoke"):
+        if identity.startswith(actor_prefixes) or (hardware_active and identity.startswith(hardware_prefix)):
             phase_ids.add(identity)
-            expected_allocation = "hardware_smoke" if development and allocation == "hardware_smoke" else ("developmental_prefixes" if development else "validation_actors")
+            expected_allocation = hardware_allocation if hardware_active and identity.startswith(hardware_prefix) else ("developmental_prefixes" if development else "validation_actors")
             require(allocation == expected_allocation, "Phase request allocation differs")
             body = strict_json(row["body_utf8"])
             require(all(body.get(key) == value for key, value in actor_sampler.items()), "Actor sampler changed")
@@ -142,15 +148,19 @@ def main():
         replay = output / "hardware-replay"
         replay.mkdir()
         def dispatch(budget, body, logical_id, allocation, job):
-            require(allocation == "hardware_smoke", "Unexpected probe allocation")
-            return cached_response(body, logical_id, completed / "hardware-smoke")
+            require(allocation == hardware_allocation, "Unexpected probe allocation")
+            return cached_response(body, logical_id, completed / hardware_job)
         with patch.object(readiness_cycle, "dispatch", dispatch):
-            abe_cycle.hardware_smoke(config, base, None, replay)
+            if smoke_spec:
+                abe_cycle.hardware_smoke(config, base, None, replay, logical_prefix=smoke_spec["logical_prefix"],
+                                         allocation=smoke_spec["allocation"], job_name=smoke_spec["job_name"])
+            else:
+                abe_cycle.hardware_smoke(config, base, None, replay)
         for name in ("tool-receipt.json", "status.json"):
-            require(read_json(replay / "hardware-smoke" / name) == read_json(completed / "hardware-smoke" / name), "Hardware receipt replay differs")
+            require(read_json(replay / hardware_job / name) == read_json(completed / hardware_job / name), "Hardware receipt replay differs")
         return {"status": "passed", "new_model_calls": 0}
 
-    if development:
+    if hardware_active:
         check("hardware", hardware)
     catalog = load_accommodations(args.catalog_csv, config["task_policy"]["catalog_csv_sha256"])
     prompts = {role: (code / config["protocol"][role + "_prompt"]).read_text() for role in ("A", "B")}
