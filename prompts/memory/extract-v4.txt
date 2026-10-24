@@ -1,0 +1,41 @@
+Extract distinct useful factual and historical claims from this completed-work source only.
+Return JSON matching the supplied schema. Each actor-visible text must itself preserve the
+author, subject, time/day/version, status, negation, conditions, approximation and price basis
+needed to avoid misinterpretation. Research fields cannot repair ambiguous actor text.
+Use small independently meaningful records. Related records may refer to the same explicit
+unique entity ID; do not merge different entities merely because their display names match.
+
+The subject is the semantic person/entity, not a guessed technical source role. Source roles
+will be derived by code from referenced event metadata. Never promote an A decision or
+assumption to a System ruling. An actor's statement that X is not necessarily evidence of X.
+Keep a user's explicit request distinct from the planner's interpretation of other preferences.
+Use status=requested for a public_requirement. A request in the initial context is
+still requested, never provided_final. Only the initially supplied plan itself is
+provided_final; cite its plan lines, not just the earlier request. Source role is
+not a substitute for the semantic status of the individual assertion.
+provided_final means the fixed base traveler's plan initially supplied as given context.
+issued_plan means a plan emitted by A, including when repeated in later history. An A output
+does not become provided_final merely because it is later provided as context. Neither means
+committed. Committed requires
+an explicit allowed runner commit receipt actually present in this archive. Accepted, rejected and
+canceled agreements must remain distinct. Preserve legitimate coordination and historical
+speech acts when present, including their refusal/cancellation context.
+
+Keep numeric values and stated qualifiers faithfully. A bare price alone does not specify currency,
+per-night, per-person or another calculation basis. Do not add these units. Preserve explicitly
+stated approximate/per-person qualifiers and the scope of a whole-trip budget. Use no outside
+knowledge. Do not silently fix source contradictions or replace an issued plan with a better one.
+An explicit unit declaration in this permitted source may establish the stated
+basis; never import a declaration from a different source or a later task.
+Literal '-' or blank plan fields mean unspecified/not listed. Preserve that
+missingness explicitly. Do not turn them into no transportation, no dinner,
+no accommodation, a prohibition, zero cost, cancellation or a negative preference.
+The lossless source view gives evidence_lines with stable span_id and exact text, including
+original newline characters. Concatenating them reconstructs the original event. Cite event_id
+and span_id exactly as supplied. Code resolves the selected line to original UTF-8 offsets;
+do not copy a paraphrase as evidence or invent an ID. Cite all needed author/day/context lines
+as well as the value line. Distinct repeated lines have distinct addresses, not extra evidence.
+For a contiguous contextual block, use span_id for its first line and optional end_span_id
+for its last line. This references that exact entire interval once; use separate refs for
+separate events or disjoint blocks. Do not infer missing day/author context from a bare value.
+One extraction attempt. No future queries, hidden answers, lookup or semantic repair.

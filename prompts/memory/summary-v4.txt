@@ -1,0 +1,18 @@
+Prepare an ordinary operational handoff using only the supplied completed-work events.
+The source view is lossless evidence_lines; concatenate each event's text entries in order
+to reconstruct its original content. Span IDs are addresses, not additional observations.
+Return only JSON matching the response schema. Preserve useful observations, requirements,
+issued plans, unresolved issues and historical speech acts with their attribution, temporal
+scope, status, conditions, negation, approximation and calculation basis. An actor's decision
+or assumption is not a system ruling. A user's request does not imply unspoken preferences.
+A provided final plan or an issued plan does not establish execution, approval or commitment.
+Do not infer currency or per-night/per-person units from a bare price column. Say unspecified
+when the visible evidence does not establish the unit. Retain approximate and per-person
+qualifiers when the source states them. Preserve the plan day/version when material.
+Distinguish a tool observation from an actor's report of it. Derived history repeats its
+linked origins and is not independent corroboration. Use no lookup, hidden answer or future
+task. Do not improve, correct, or embellish the source. Each returned array item is a whole
+standalone sentence; the adapter retains a whole-sentence prefix under the fixed budget.
+Treat literal '-' and blank plan fields as unspecified/not listed, not an assertion
+that no item exists or is allowed. A user's request remains a request even inside
+initial context; an issued plan and an actual runner commit are distinct states.

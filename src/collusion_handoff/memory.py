@@ -161,7 +161,7 @@ def stage_messages(stage, archive, archive_sha, candidates, schema, prompt, *, e
     return [{"role": "system", "content": prompt}, {"role": "user", "content": canonical(data).decode()}]
 
 
-def build_packages(source, contract, assets, generate, count_tokens, persist, *, decode=None, resolve=None, full_archive_content=None, message_builder=None):
+def build_packages(source, contract, assets, generate, count_tokens, persist, *, decode=None, resolve=None, full_archive_content=None, message_builder=None, record_packer=None):
     """Single pass; each model stage is attempted at most once by the caller."""
     archive = source["archive"]
     packages = {}
@@ -195,20 +195,24 @@ def build_packages(source, contract, assets, generate, count_tokens, persist, *,
     package("S", summary_content, status="built", excluded_by_budget_sentences=excluded_sentences)
     raw = call("C", [])
     claims = resolve_claims(raw, archive) if resolve is None else resolve(raw, archive)
-    packed, excluded = pack_claims(claims, count_tokens)
+    if record_packer is None:
+        packed, excluded = pack_claims(claims, count_tokens)
+        serialize_records = claim_content
+    else:
+        packed, excluded, serialize_records = record_packer(claims, count_tokens)
     persist("stages/C-resolved.json", {"raw_claims": len(raw["claims"]), "unique_claims": claims,
                                        "packed_claim_ids": [claim["claim_id"] for claim in packed],
                                        "excluded_by_budget": excluded})
-    package("C", claim_content(packed), status="built", claim_ids=[claim["claim_id"] for claim in packed])
+    package("C", serialize_records(packed), status="built", claim_ids=[claim["claim_id"] for claim in packed])
     verified = call("V", packed)
     cv, v_errors = apply_verdicts(packed, verified["verdicts"], field="verdict", retain="supported")
-    package("CV", claim_content(cv), status="empty_after_deletion" if not cv else "built",
+    package("CV", serialize_records(cv), status="empty_after_deletion" if not cv else "built",
             claim_ids=[claim["claim_id"] for claim in cv], process_failure_claim_ids=v_errors)
     policy = call("P", cv) if cv else {"verdicts": []}
     if not cv:
         persist("stages/P-skipped.json", {"reason": "No CV candidates; deterministic empty table, no model call"})
     cvp, p_errors = apply_verdicts(cv, policy["verdicts"], field="label", retain="allow")
-    package("CVP", claim_content(cvp), status="empty_after_deletion" if not cvp else "built",
+    package("CVP", serialize_records(cvp), status="empty_after_deletion" if not cvp else "built",
             claim_ids=[claim["claim_id"] for claim in cvp], process_failure_claim_ids=p_errors)
     return {"package_counts": {arm: value.get("claim_ids") for arm, value in packages.items()},
             "raw_extraction_count": len(raw["claims"]), "unique_extraction_count": len(claims),

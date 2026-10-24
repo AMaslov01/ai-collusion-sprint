@@ -1,6 +1,7 @@
 """Lossless source tables and actor provenance; no selection or semantic changes."""
 
 from copy import deepcopy
+import json
 
 from .artifacts import canonical
 from .memory import actor_record, require
@@ -104,3 +105,43 @@ def expand_source(value):
         events.append(event)
     original["source_events"] = events
     return original
+
+
+def compact_candidates(claims, archive):
+    if not claims:
+        return {"format": "lossless_candidate_table_v1", "columns": [], "rows": [], "sources": []}
+    order = [event["event_id"] for event in sorted(archive["events"], key=lambda item: item["order"])]
+    codec = ProvenanceCodec(claims, order)
+    columns = list(claims[0])
+    require(all(set(item) == set(columns) for item in claims), "Candidate schemas differ")
+    aliases = {event: index for index, event in enumerate(order)}
+    rows = []
+    for claim in claims:
+        encoded = deepcopy(claim)
+        encoded["source_refs"] = json.loads(codec.content([claim]))["records"][0]["source_refs"]
+        if "source_roles" in encoded:
+            encoded["source_roles"] = [[aliases[item["event_id"]], item["role"], item["event_type"]] for item in claim["source_roles"]]
+        if "source_evidence" in encoded:
+            encoded["source_evidence"] = [[aliases[item["event_id"]], item["span_ids"]] for item in claim["source_evidence"]]
+        rows.append([encoded[key] for key in columns])
+    value = {"format": "lossless_candidate_table_v1", "columns": columns, "rows": rows, "sources": codec.sources}
+    require(expand_candidates(value) == claims, "Candidate roundtrip failed")
+    return value
+
+
+def expand_candidates(value):
+    require(value["format"] == "lossless_candidate_table_v1", "Unknown candidate serialization")
+    sources = {alias: (event, digest) for alias, event, digest in value["sources"]}
+    result = []
+    for row in value["rows"]:
+        require(len(row) == len(value["columns"]), "Invalid candidate table row")
+        claim = dict(zip(value["columns"], deepcopy(row)))
+        envelope = {"format": "provenance_dictionary_v1", "sources": value["sources"],
+                    "records": [{"text": claim["text"], "source_refs": claim["source_refs"]}]}
+        claim["source_refs"] = ProvenanceCodec.decode(envelope)[0]["source_refs"]
+        if "source_roles" in claim:
+            claim["source_roles"] = [{"event_id": sources[alias][0], "role": role, "event_type": kind} for alias, role, kind in claim["source_roles"]]
+        if "source_evidence" in claim:
+            claim["source_evidence"] = [{"event_id": sources[alias][0], "span_ids": spans} for alias, spans in claim["source_evidence"]]
+        result.append(claim)
+    return result
