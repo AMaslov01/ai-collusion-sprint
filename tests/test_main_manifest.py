@@ -81,6 +81,7 @@ class MainManifestTests(unittest.TestCase):
             lambda m: m["sample"].update(group_ids=[1, 999]),
             lambda m: m["sample"].update(assigned_group_count=3),
             lambda m: m["sample"]["prefix_condition_by_group"].pop("998"),
+            lambda m: m["sample"].update(prefix_condition_by_group={"998": "nominal", "999": "nominal"}),
             lambda m: m["sample"].update(future_task_indices=[3]),
             lambda m: m["budget"].update(max_model_attempts=399),
             lambda m: m["budget"].update(max_input_output_tokens=0),
