@@ -291,10 +291,10 @@
     "scope": "Only group1 checkpoint2 memory prototype; original native deadline unchanged for all other work"
   },
   "execution_gate": {
-    "status": "human_approved_compact_view_requires_fresh_preflight",
+    "status": "stopped_needs_human_parser_decision",
     "question_thread_id": "01a1688e-8fee-7140-b505-6f93e571c740",
     "question_call_id": "call_5a915b0161a642db899a954b7f3ee81c",
-    "last_verified_code": "49112cd47cf8177b3b29453b2122999f7f65439e",
+    "last_verified_code": "99c5118bdfcfd7c8e986ce4d5fc2f3ac4491faa7",
     "source_archive_sha256": "d99a521528ec85f2010b30a7a9e165df97ec55d2c5c4dc7b2987279180df8017",
     "full_source_rendered_input_tokens": {
       "S": 33230,
@@ -305,7 +305,7 @@
       "C": 14365
     },
     "compact_projection_enabled": true,
-    "new_model_calls": 0,
+    "new_model_calls": 1,
     "unit_tests_passed": 23
   },
   "model_view_approval_evidence": {
@@ -318,5 +318,65 @@
     "verification": "Direct read_thread of actual user answer including the compact-view question; not inferred from agent review",
     "prepared_method_commit": "49112cd47cf8177b3b29453b2122999f7f65439e",
     "scope": "Only group1 checkpoint2, all25 original events and exact text, full audit archive retained, common source_version once, max4 attempts, no retries, cutoff2026-10-24T11:13:00Z"
+  },
+  "execution_result": {
+    "status": "stopped_needs_review",
+    "scope": "native_group1_checkpoint2_memory_prototype_only",
+    "run_path": "/mnt/ssd/a.maslov/ai-collusion-sprint/runs/memory-group1-cp2-v1",
+    "adapter_commit": "99c5118bdfcfd7c8e986ce4d5fc2f3ac4491faa7",
+    "plan_sha256": "74a809557b8c30f649bd9424197b9e61ac020bde9f76b428bd45f1dcb575af72",
+    "source_archive_sha256": "d99a521528ec85f2010b30a7a9e165df97ec55d2c5c4dc7b2987279180df8017",
+    "model_view_sha256": "507356c52b405e0db5ba7bff8bd251b441699cfdd8c5a8395c8a9c9f76057fcb",
+    "model_attempts": 1,
+    "max_model_attempts": 4,
+    "retries": 0,
+    "stage_calls": {
+      "S": 1,
+      "C": 0,
+      "V": 0,
+      "P": 0
+    },
+    "usage": {
+      "completion_tokens": 628,
+      "completion_tokens_details": {
+        "reasoning_tokens": 0
+      },
+      "prompt_tokens": 14075,
+      "prompt_tokens_details": null,
+      "total_tokens": 14703
+    },
+    "package_statuses": {
+      "C": "not_built_due_prior_stage_failure",
+      "CV": "not_built_due_prior_stage_failure",
+      "CVP": "not_built_due_prior_stage_failure",
+      "F": "built_full_permitted_archive",
+      "R": "built_empty_private_archive",
+      "S": "package_build_failure"
+    },
+    "failure_reason": "S returned one external Markdown json fence; original strict parser correctly rejected it",
+    "official_S_accepted": false,
+    "failure_report_sha256": "c40cf8c2a73e954721108040a5791086dbf2d58475ff916a6546605226fe4bde",
+    "wire_request_ledger_sha256": "1bb88f0a53054e113a8f5c7ca4b628933f2249c55b46761adc5bc594dae30cdf",
+    "wire_response_ledger_sha256": "ae77443e3eb0357514e2db6512687abaf77d0a21561c1d621d7e73347ced8c31",
+    "cache_audit": {
+      "status": "passed_cache_only",
+      "new_model_calls": 0,
+      "sha256": "55f947e2cefe7d83255c5197cb014bfe89215dd53f5c596905a7cd0280127dd7",
+      "path": "/mnt/ssd/a.maslov/ai-collusion-sprint/bootstrap/memory-audit-99c5118bdfcfd7c8e986ce4d5fc2f3ac4491faa7/audit.json"
+    },
+    "structural_diagnosis": {
+      "accepted_or_repaired": false,
+      "inner_json_and_schema": "would_pass",
+      "source_prompt_matches": true,
+      "sha256": "000b6bc650d55977cfa9fa5adc201b586a64bdb63de89c6e0918349cf4728b08",
+      "path": "/mnt/ssd/a.maslov/ai-collusion-sprint/bootstrap/memory-format-67ca2732ff331252e6d89c0b522b97f86ad86aca/format-diagnostics.json"
+    },
+    "sampled_peak_vram_mib": 40001,
+    "gpu_after_mib": 0,
+    "human_completed_forms": 0,
+    "groups2_12_started": false,
+    "two_agent_dev_started": false,
+    "main_started": false,
+    "next_step": "Wait for actual human parser decision; no retry, fence removal, new inference or scope extension is authorized by this record"
   }
 }
