@@ -158,7 +158,7 @@ def stage_messages(stage, archive, archive_sha, candidates, schema, prompt, *, e
     return [{"role": "system", "content": prompt}, {"role": "user", "content": canonical(data).decode()}]
 
 
-def build_packages(source, contract, assets, generate, count_tokens, persist):
+def build_packages(source, contract, assets, generate, count_tokens, persist, *, decode=None):
     """Single pass; each model stage is attempted at most once by the caller."""
     archive = source["archive"]
     packages = {}
@@ -178,7 +178,7 @@ def build_packages(source, contract, assets, generate, count_tokens, persist):
         messages = stage_messages(stage, archive, source["archive_sha256"], candidates, asset["schema"], asset["prompt"],
                                   event_fields=contract["stage_input_envelope"].get("model_event_fields"))
         text = generate(stage, messages)
-        value = validate(text, asset["schema"])
+        value = validate(text, asset["schema"]) if decode is None else decode(stage, text, asset["schema"])
         persist(f"stages/{stage}.json", value)
         return value
 

@@ -1,0 +1,44 @@
+{
+  "status": "human_approved",
+  "scope": "native_group1_cp2_cached_format_recovery_and_remaining_stages_only",
+  "decoder_version": "pure_json_or_single_external_json_fence_v1",
+  "decoder_rule": "Unmodified pure JSON or one lowercase json Markdown fence pair on separate lines, with standard whitespace outside; validate the exact inner substring with the unchanged strict parser/schema. Additional delimiters, other prefixes/suffixes, different language tags or malformed inner JSON fail. No content repair or normalization.",
+  "applies_identically_to": [
+    "S",
+    "C",
+    "V",
+    "P"
+  ],
+  "base_code_commit": "99c5118bdfcfd7c8e986ce4d5fc2f3ac4491faa7",
+  "parent_plan_sha256": "74a809557b8c30f649bd9424197b9e61ac020bde9f76b428bd45f1dcb575af72",
+  "parent_failure_report_sha256": "c40cf8c2a73e954721108040a5791086dbf2d58475ff916a6546605226fe4bde",
+  "parent_request_ledger_sha256": "1bb88f0a53054e113a8f5c7ca4b628933f2249c55b46761adc5bc594dae30cdf",
+  "parent_response_ledger_sha256": "ae77443e3eb0357514e2db6512687abaf77d0a21561c1d621d7e73347ced8c31",
+  "reuse_cached_S": true,
+  "max_new_attempts": 3,
+  "max_cumulative_attempts": 4,
+  "new_stages": [
+    "C",
+    "V",
+    "P"
+  ],
+  "retries": 0,
+  "task_deadline_utc": "2026-10-24T11:13:00Z",
+  "parent_v1_failure_remains_unchanged": true,
+  "prompts_sampler_schemas_provenance_and_packing_unchanged": true,
+  "human_approval_evidence": {
+    "thread_id": "01a1688e-8fee-7140-b505-6f93e571c740",
+    "turn_id": "01a16d6c-5cf2-7501-b47b-17d3d6a116be",
+    "human_message_id": "01a16d6c-5d1e-70f1-86fa-861d58ae2be8",
+    "question_call_id": "call_1c56ae9962d44909adc6ad21e5f50bc7",
+    "human_reply": "Да, снять обёртку и продолжить",
+    "verification": "Direct read_thread of actual user response, including the S/C/V/P decoder question and remaining3-call limit"
+  },
+  "routine_engineering_authority": {
+    "thread_id": "01a1688e-8fee-7140-b505-6f93e571c740",
+    "human_message_id": "01a16d6c-c218-7f30-b48a-aa9dd907486f",
+    "human_text": "слушай, слишком много технических вопросов задаешь, такие вещи разрещаю самому решать",
+    "verification": "Direct read_thread",
+    "scope": "Routine engineering within existing scientific design, group1/cp2, cumulative4 attempts, fixed resources and deadlines; no new A/B or main authorization"
+  }
+}

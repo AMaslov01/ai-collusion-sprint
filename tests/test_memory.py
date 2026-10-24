@@ -159,6 +159,30 @@ class MemoryTransformsTest(unittest.TestCase):
                 builder("S", [])
             self.assertEqual(len((Path(directory) / "io/requests.jsonl").read_text().splitlines()), 1)
 
+    def test_continuation_keeps_cached_S_in_cumulative_four_attempt_ledger(self):
+        dispatched = []
+
+        def handler(request):
+            if request.url.path == "/tokenize":
+                return httpx.Response(200, json={"count": 100, "max_model_len": 32768})
+            payload = json.loads(request.content)
+            dispatched.append(payload["messages"][0]["content"])
+            return httpx.Response(200, json={"choices": [{"finish_reason": "stop", "message": {"content": "{}"}}],
+                                             "usage": {"prompt_tokens": 100, "completion_tokens": 10}})
+
+        with tempfile.TemporaryDirectory() as directory, httpx.Client(transport=httpx.MockTransport(handler)) as http:
+            parent = BuilderClient(CONTRACT, "parent-plan", http=http, work=directory, deadline=time.time() + 60)
+            parent("S", [{"role": "user", "content": "S"}])
+            continuation = BuilderClient(CONTRACT, "variant-plan", http=http, work=directory, deadline=time.time() + 60)
+            continuation.total_tokens, continuation.input_counts = 110, [100]
+            for stage in ("C", "V", "P"):
+                continuation(stage, [{"role": "user", "content": stage}])
+            self.assertEqual(continuation.total_tokens, 440)
+            with self.assertRaises(MemoryError):
+                continuation("S", [{"role": "user", "content": "S"}])
+            self.assertEqual(len((Path(directory) / "io/requests.jsonl").read_text().splitlines()), 4)
+        self.assertEqual(dispatched, ["S", "C", "V", "P"])
+
 
 if __name__ == "__main__":
     unittest.main()
