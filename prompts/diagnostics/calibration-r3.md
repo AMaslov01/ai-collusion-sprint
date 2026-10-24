@@ -100,14 +100,24 @@ from canonical committed prices. Source reviewers work before memory generation;
 an unresolved disagreement remains `uncertain` and cannot qualify a source for
 the dependent stage. These DEV AI reviews are not human gold annotations.
 
-Maximum for the complete plan is164 new model attempts. Before dispatch, derive
-finite token, GPU-service and clock ceilings from the closed057 parent receipt;
-do not reset or expand its immutable master. The coordinator must publish the
-exact new block and cumulative accounting. The intended upper bounds are2M
-input/output tokens and90 minutes allocated GPU service, subject to remaining
-overall DEV allowances and the existing cutoff. All inference uses the authorized
-GPU3 L40S, TP1, concurrency1, same pinned model/image/samplers. GPU4 remains a
-reserve and main remains closed.
+The closed parent is [closed-parent-receipt-05729ef.json](../../results/readiness-cycle-v5-20261024/closed-parent-receipt-05729ef.json),
+SHA256 `7beb2509fd2179a1bed50502d7a1c7d0d387eff8c20b25211a7bb53b4e7da622`.
+The child maximum is 164 new attempts, 2M input/output tokens and 5400 allocated
+GPU-container seconds across both stages. Charge at most 160 actor attempts to
+the existing `validation_actors` allocation and four builders to the existing
+`reviewed_targeted_repairs` allocation. Preserve the old master and its 153-row
+request/response byte prefixes. The resulting cumulative upper bounds are 317
+attempts, 2,930,767 tokens and 9121 GPU-container seconds, below the unchanged
+400 / 6M / 14400 master limits and October 25 12:00 UTC cutoff.
+
+Publish separate concrete dispatches: first at most 40 prefix actor calls, then
+at most 124 builder/continuation calls only after the source-only selection lock.
+Stop the first GPU container before the source audit; sum actual container
+lifetimes rather than counting only HTTP durations or resetting a service clock.
+The versioned child amendment binds the closed parent and adds stricter child
+guards on the same append-only global spending ledger. All inference uses the
+authorized GPU3 L40S, TP1, concurrency1, same pinned model/image/samplers. GPU4
+remains a reserve and main remains closed.
 
 ## Readiness and reporting
 
