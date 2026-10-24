@@ -47,6 +47,6 @@ docker run -d --name "$CAN_NAME" --label owner=a.maslov --label scope=readiness-
  --mount "type=bind,src=$CAN_PROJECT/cache,dst=/cache" --mount "type=bind,src=$CAN_PROJECT/bootstrap/control,dst=/control,readonly" \
  --workdir "$CAN_UPSTREAM" --entrypoint /usr/bin/timeout "$(cat "$CAN_PROJECT/bootstrap/environment/image-id.txt")" \
  --signal=TERM --kill-after=30s "${CAN_REMAINING}s" /bin/bash -c \
- 'set -e; umask 077; test ! -e /control/STOP; python3 -m unittest discover -s /code/tests -v > /work/unittest.log 2>&1; python3 /code/scripts/probe-structured-output.py > /work/probe.log 2>&1; python3 /code/scripts/measure-memory-codec.py > /work/codec.log 2>&1'
+ 'set -e; umask 077; test ! -e /control/STOP; python3 -m unittest discover -s /code/tests -v > /work/unittest.log 2>&1; python3 /code/scripts/probe-structured-output.py > /work/probe.log 2>&1; python3 /code/scripts/measure-memory-codec.py > /work/codec.log 2>&1; python3 /code/scripts/prepare-abe-dev.py > /work/abe-preparation.log 2>&1'
 docker inspect "$CAN_NAME" > "$CAN_WORK/docker-inspect.json"
 printf '%s\n' "$CAN_WORK"

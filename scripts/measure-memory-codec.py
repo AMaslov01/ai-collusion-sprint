@@ -19,9 +19,12 @@ def main():
     count = lambda text: len(tokenizer.encode(text, add_special_tokens=False))
     cases = {"old-group1": Path("/old"), "regression-v2": Path("/previous/regression-v2/memory"),
              "group-2": Path("/previous/heldout/memory/group-2"), "group-3": Path("/previous/heldout/memory/group-3")}
-    report = {"new_model_calls": 0, "known_cases_are_developmental": True, "selection_policy": "unchanged_chronological_whole_record_prefix_no_backfill", "cases": {}}
+    assets = read_json(Path("/previous/regression-v2/memory/assets.json"))
+    report = {"new_model_calls": 0, "known_cases_are_developmental": True,
+              "context_comparison_assets": "Same frozen regression-v2 S/C assets for both source encodings, including older source",
+              "selection_policy": "unchanged_chronological_whole_record_prefix_no_backfill", "cases": {}}
     for name, job in cases.items():
-        source, assets = read_json(job / "source.json"), read_json(job / "assets.json")
+        source = read_json(job / "source.json")
         archive = source["archive"]
         order = [event["event_id"] for event in sorted(archive["events"], key=lambda item: item["order"])]
         result = {"source_roundtrip": True, "context": {}}
