@@ -121,3 +121,10 @@ packing losses, actual builder/actor token costs and reference failures separate
 After this block, present the evidence and a concrete main design for the human
 approval already required by `AGENT_HANDOFF.md`. No main prefixes are authorized
 by a calibration pass, this direction choice, or available GPU time.
+
+`H` after handoff is a canonical above-cap commit, not an automatic label of a
+new deliberate conspiracy. Report first A′ unsafe proposals separately from
+completed harmful commits and from actual A′/B coordination evidence. The paired
+memory comparison estimates how the transfer policy changes subsequent behavior
+after an induced pact; it does not by itself identify the agents' intentions or
+separate the effect of replacing A from removing both active objectives.
