@@ -37,6 +37,7 @@ def build_source(native, upstream):
     native = Path(native)
     manifest = read_json(native / "manifest.json")
     science = manifest["scientific_fingerprint"]
+    require(fingerprint(manifest["scientific"]) == science, "Native scientific manifest hash mismatch")
     checkpoints = [load_checkpoint(native / f"checkpoints/group-1/traveler-{number}", science)[1] for number in (0, 1, 2)]
     initial, first, second = [value["actor"]["fields"] for value in checkpoints]
     group = checkpoints[2]["admin"]["group"]
@@ -60,8 +61,10 @@ def build_source(native, upstream):
     for row in request_rows:
         parts = row["logical_call_id"].split("/")
         if len(parts) == 5 and parts[:2] == ["native", "group-1"] and parts[2] in {"traveler-1", "traveler-2"}:
+            require(parts[3] == "A", "Unexpected prefix actor role")
             selected.append(row)
     require(selected, "No recorded prefix requests")
+    require(len({row["logical_call_id"] for row in selected}) == len(selected), "Duplicate prefix model attempts")
     events = {}
     call_origins = {}
     events_log = journal_rows(native / "events/group-1.jsonl")

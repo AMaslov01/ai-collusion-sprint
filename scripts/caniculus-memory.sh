@@ -16,6 +16,7 @@ CAN_CONTRACT="$CAN_CODE/configs/memory-group1.json"
 CAN_MODEL="$CAN_PROJECT/inputs/Qwen3.8-27B-FP8/017b9c7af6b5689d5dd426a76e0bc077eb5ca20a"
 CAN_IDENTITIES="$CAN_PROJECT/bootstrap/preparation-31f9c028bd8615c4b7648144c278ed0d6ffbe56c"
 CAN_NATIVE="$CAN_PROJECT/runs/native-dev-921d20611324ab0429f119380e12389f44223e61"
+CAN_TASKS="$CAN_PROJECT/bootstrap/preparation-33d29710c408fd9851e9de0db5e436cc623b595c/task-data"
 CAN_LOCK_SHA=$(sha256sum "$CAN_CODE/configs/travel-tools.lock" | cut -d ' ' -f 1)
 CAN_VENDOR="$CAN_PROJECT/dependencies/travel-tools-$CAN_LOCK_SHA"
 CAN_CHECKS="$CAN_PROJECT/bootstrap/memory-checks-$CAN_CODE_SHA"
@@ -33,7 +34,7 @@ CAN_TASK_DEADLINE=1792840380
 CAN_REMAINING=$((CAN_TASK_DEADLINE-$(date +%s)))
 test "$CAN_REMAINING" -gt 0
 test ! -e "$CAN_PROJECT/bootstrap/control/STOP"
-for CAN_PATH in "$CAN_PROJECT" "$CAN_CODE" "$CAN_MODEL" "$CAN_VENDOR" "$CAN_IDENTITIES" "$CAN_NATIVE" "$CAN_PROJECT/inputs/MemoryArena" "$CAN_PROJECT/inputs/travel-database" "$CAN_PROJECT/cache"; do
+for CAN_PATH in "$CAN_PROJECT" "$CAN_CODE" "$CAN_MODEL" "$CAN_VENDOR" "$CAN_IDENTITIES" "$CAN_NATIVE" "$CAN_TASKS" "$CAN_PROJECT/inputs/MemoryArena" "$CAN_PROJECT/inputs/travel-database" "$CAN_PROJECT/cache"; do
   test "$(realpath -- "$CAN_PATH")" = "$CAN_PATH"
   test "$(stat -c %u -- "$CAN_PATH")" = "$(id -u)"
 done
@@ -78,6 +79,7 @@ docker run -d --name "$CAN_NAME" --label owner=a.maslov --label "adapter_commit=
   --mount "type=bind,src=$CAN_PROJECT/inputs/travel-database,dst=/database,readonly" \
   --mount "type=bind,src=$CAN_IDENTITIES,dst=/identities,readonly" \
   --mount "type=bind,src=$CAN_NATIVE,dst=/native,readonly" \
+  --mount "type=bind,src=$CAN_TASKS,dst=/tasks,readonly" \
   --mount "type=bind,src=$CAN_VENDOR,dst=/vendor,readonly" \
   --mount "type=bind,src=$CAN_PROJECT/cache,dst=/cache" \
   --mount "type=bind,src=$CAN_WORK,dst=/work" \

@@ -210,7 +210,9 @@ def preflight(contract):
     counts = {}
     for stage in ("S", "C"):
         messages = stage_messages(stage, source["archive"], source["archive_sha256"], [], assets[stage]["schema"], assets[stage]["prompt"])
-        encoded = tokens.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, enable_thinking=False)
+        encoded = tokens.apply_chat_template(messages, tokenize=True, add_generation_prompt=True,
+                                             enable_thinking=False, return_dict=False)
+        require(isinstance(encoded, list) and all(type(token) is int for token in encoded), "Unexpected preliminary tokenizer return type")
         counts[stage] = len(encoded)
         require(counts[stage] <= contract["limits"]["input_caps"][stage], f"CPU preflight {stage} full input overflow: {counts[stage]}")
     atomic_json(WORK / "preflight.json", {"status": "passed_no_model_calls", "plan_sha256": plan_sha,
