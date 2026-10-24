@@ -16,7 +16,16 @@
     "repo": "ZexueHe/memoryarena",
     "revision": "da1a37c8b19280e18627ca01cf368195a5e1d92e",
     "config": "group_travel_planner",
-    "file_hashes": "UNSET",
+    "file_hashes": {
+      "source_file": "group_travel_planner/data.jsonl",
+      "sha256": "2f955d444f6f3ad3c5da2064359ab19f8fc1f90621ff9d00723a450a009c3732",
+      "registry": {
+        "path": "/mnt/ssd/a.maslov/ai-collusion-sprint/bootstrap/preparation-33d29710c408fd9851e9de0db5e436cc623b595c/task-data/registry.json",
+        "sha256": "d76de5758740be09069cb225b1174fab83037dcbae2f843653ba01e225921820"
+      },
+      "groups": 270,
+      "selection_confirmed": false
+    },
     "flight_csv_sha256": "8dafdb0e3f8b79ce599a1e612a772865295bc226b46e5fb278368f7255b11cee",
     "tool_input_manifest": {
       "path": "/mnt/ssd/a.maslov/ai-collusion-sprint/bootstrap/preparation-31f9c028bd8615c4b7648144c278ed0d6ffbe56c/catalog-identity.json",
@@ -90,7 +99,7 @@
     "task_wall_time_seconds": "UNSET"
   },
   "smoke": {
-    "status": "configuration_confirmed_execution_pending",
+    "status": "passed_cache_only_audit_verified",
     "tensor_parallel_size": 1,
     "max_model_len": 32768,
     "client_concurrency": 1,
@@ -126,6 +135,40 @@
       "gpu_help_exit_code": 0,
       "path": "/mnt/ssd/a.maslov/ai-collusion-sprint/bootstrap/smoke-gpu-preflight/vllm-serve-help.txt",
       "cpu_only_help": "Device inference failed without a GPU; the same immutable image CLI passed with the approved GPU1. No model loaded."
+    },
+    "result": {
+      "adapter_commit": "1853fa606f8998cde1aadb30cd0f15e3dba06645",
+      "run_directory": "/mnt/ssd/a.maslov/ai-collusion-sprint/bootstrap/smoke-run-1853fa606f8998cde1aadb30cd0f15e3dba06645",
+      "audit": {
+        "path": "/mnt/ssd/a.maslov/ai-collusion-sprint/bootstrap/smoke-audit-5bbda9cd7071321653da5f52d8c74eb4648e867f/audit.json",
+        "sha256": "55d022a47053928e6ac36254ef4de1064d4b04f1e782af8ace416ce19f4c3436",
+        "status": "passed",
+        "model_calls_during_audit": 0
+      },
+      "completed_model_attempts": 3,
+      "retries": 0,
+      "prompt_tokens": [
+        16,
+        349,
+        996
+      ],
+      "completion_tokens": [
+        3,
+        30,
+        129
+      ],
+      "reasoning_tokens": [
+        0,
+        0,
+        0
+      ],
+      "actual_model_dtype": "torch.bfloat16",
+      "actual_kv_tensor_dtype": "torch.bfloat16",
+      "weight_kernel": "FP8 weight-only Marlin selected by the pinned runtime on L40",
+      "sampled_peak_vram_mib": 39767,
+      "gpu_memory_after_mib": 0,
+      "native_dev_started": false,
+      "main_started": false
     }
   },
   "prompts": {
@@ -246,7 +289,7 @@
       "/opt/ai-collusion/sources/MemoryArena"
     ],
     "wall_time_seconds": 43200,
-    "deadline": "UNSET",
+    "deadline": "2026-10-24T11:13:16Z",
     "per_call_timeout_seconds": "UNSET",
     "max_attempts": "UNSET",
     "retry_backoff_seconds": "UNSET",
@@ -271,7 +314,8 @@
       "scope": "current_preparation_downloads",
       "evidence": "User instruction in this chat on 2026-10-24: it is currently night and downloads may run without a speed restriction. Not a standing exemption for future daytime transfers."
     },
-    "stop_file": "STOP"
+    "stop_file": "STOP",
+    "compute_started_unix": 1792797196
   },
   "budgets": {
     "modal_usd_limit": 0,
@@ -296,9 +340,24 @@
       "question": "Native DEV volume and actual upstream group/traveler IDs",
       "status": "PROPOSED",
       "proposed_value": {
-        "max_groups": 12,
+        "group_ids": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
         "max_new_travelers": 4,
-        "checkpoint_after": 2
+        "checkpoint_after": 2,
+        "minimum_available_new_requests": 5,
+        "selection_status": "PROPOSED_NOT_EFFECTIVE"
       },
       "effective_value": "UNSET",
       "evidence": "AGENT_HANDOFF.md D04; actual IDs require server-side inspection and user confirmation"
@@ -453,6 +512,37 @@
         "base_image_change": "none"
       },
       "evidence": "User explicitly replied разрешаю after the missing-pandas diagnosis and isolated-install proposal in this chat on 2026-10-24."
+    },
+    {
+      "id": "NATIVE_DEV_RUNTIME_BUDGET",
+      "question": "Apply smoke configuration to native DEV and confirm its additional finite budgets",
+      "status": "PROPOSED",
+      "proposed_value": {
+        "runtime_from": "/smoke",
+        "actor_sampler_from": "/generation",
+        "seed": 42,
+        "max_steps_per_traveler": 30,
+        "max_model_attempts_per_traveler": 30,
+        "total_input_plus_output_tokens_per_traveler": 200000,
+        "traveler_wall_time_seconds": 1800,
+        "native_block_wall_time_seconds": 21600,
+        "attempts_per_call": 1,
+        "package_deadline": "2026-10-24T11:13:16Z"
+      },
+      "effective_value": "UNSET",
+      "evidence": "Prepared for user review after successful smoke; no native model calls until confirmation."
+    },
+    {
+      "id": "NATIVE_PINNED_DATA_READER",
+      "question": "Native upstream data_loader imports datasets, which is absent from the pinned image",
+      "status": "PROPOSED",
+      "proposed_value": {
+        "reader": "Read the already verified pinned JSONL in the thin adapter, preserving upstream _convert_row semantics and testing exact parity offline",
+        "upstream_patch": "none",
+        "new_packages": "none"
+      },
+      "effective_value": "UNSET",
+      "evidence": "Package metadata in the cache-only smoke audit reports datasets and pyarrow absent. No additional installation or effective loader change authorized by this proposal."
     }
   ]
 }
