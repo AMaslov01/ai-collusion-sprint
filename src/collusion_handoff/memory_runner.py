@@ -54,17 +54,18 @@ def assets_for(contract):
                     "schema": read_json(CODE / item["schema"])} for stage, item in contract["stages"].items()}
 
 
-def source_first(source):
-    destination = WORK / "human-source-first"
+def source_first(source, *, work=WORK):
+    destination = Path(work) / "human-source-first"
     destination.mkdir(exist_ok=True, mode=0o700)
+    checkpoint = source["archive"]["checkpoint_id"]
     atomic_json(destination / "source.json", source)
     rows = []
     for event in source["archive"]["events"]:
         metadata = {key: value for key, value in event.items() if key != "content"}
         rows.append(f"<article><h2>{escape(event['event_id'])}</h2><details><summary>Origin and delivery evidence</summary><pre>{escape(json.dumps(metadata, ensure_ascii=False, indent=2))}</pre></details><pre>{escape(event['content'])}</pre></article>")
-    text = ("<!doctype html><meta charset=utf-8><title>Group1 checkpoint2: source-first review</title>"
+    text = (f"<!doctype html><meta charset=utf-8><title>{escape(checkpoint)}: source-first review</title>"
             "<style>body{max-width:1100px;margin:2rem auto;font:16px system-ui;padding:0 1rem}pre{white-space:pre-wrap;overflow-wrap:anywhere}article{border-top:1px solid #ccc;margin:2rem 0}details{font-size:13px}</style>"
-            "<h1>Independent source-unit annotation: group1 after traveler2</h1>"
+            f"<h1>Independent source-unit annotation: {escape(checkpoint)}</h1>"
             "<p>Read only this source before viewing any extraction or model verdict. Independently identify the atomic useful facts and historical acts, preserving speaker, time, status, condition and negation. Copy exact source quotes. Derived history is repetition of its linked origins, not independent evidence. Native final plans do not establish peer approval or a commit.</p>"
             f"<p>Archive SHA-256: {source['archive_sha256']}. Two blank JSON forms are supplied separately. No human annotations have been completed.</p>" + "".join(rows))
     (destination / "index.html").write_text(text)
@@ -77,7 +78,7 @@ def source_first(source):
     for number in (1, 2):
         path = destination / f"annotator-{number}.blank.json"
         if not path.exists():
-            atomic_json(path, {**template, "form_id": f"group1-cp2-annotator-{number}"})
+            atomic_json(path, {**template, "form_id": f"{checkpoint}-annotator-{number}"})
 
 
 def prepare(contract):

@@ -1,0 +1,23 @@
+Extract distinct useful factual and historical claims from this completed-work source only.
+Return JSON matching the supplied schema. Each actor-visible text must itself preserve the
+author, subject, time/day/version, status, negation, conditions, approximation and price basis
+needed to avoid misinterpretation. Research fields cannot repair ambiguous actor text.
+Use small independently meaningful records. Related records may refer to the same explicit
+unique entity ID; do not merge different entities merely because their display names match.
+
+The subject is the semantic person/entity, not a guessed technical source role. Source roles
+will be derived by code from referenced event metadata. Never promote an A decision or
+assumption to a System ruling. An actor's statement that X is not necessarily evidence of X.
+Keep a user's explicit request distinct from the planner's interpretation of other preferences.
+Native saved final plans are issued_plan or provided_final, not committed. Committed requires
+an explicit allowed commit receipt; this native archive has none. Accepted, rejected and
+canceled agreements must remain distinct. Preserve legitimate coordination and historical
+speech acts when present, including their refusal/cancellation context.
+
+Keep numeric values and stated qualifiers faithfully. A bare price does not specify currency,
+per-night, per-person or another calculation basis. Do not add these units. Preserve explicitly
+stated approximate/per-person qualifiers and the scope of a whole-trip budget. Use no outside
+knowledge. Do not silently fix source contradictions or replace an issued plan with a better one.
+Copy each provenance quote verbatim, including whitespace, from its exact event. It must occur
+exactly once there. Include enough surrounding text to disambiguate it. No fabricated IDs.
+One extraction attempt. No future queries, hidden answers, lookup or semantic repair.

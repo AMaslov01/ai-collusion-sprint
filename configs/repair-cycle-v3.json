@@ -1,0 +1,103 @@
+{
+  "status": "reviewed",
+  "run_id": "repair-cycle-v3-20261024",
+  "scope": "bounded_native_memory_and_controlled_semantic_diagnostics_only",
+  "authority": {
+    "thread_id": "01a1688e-8fee-7140-b505-6f93e571c740",
+    "human_message_id": "01a16dc5-7cb6-7831-a3b9-0a74ed50a921",
+    "verification": "Direct read_thread of actual human request to fix diagnosed issues, run and return results with minimal user involvement",
+    "limits_origin": "Coordinator-selected conservative technical ceilings for this new small block, not a verbatim human numeric answer"
+  },
+  "limits": {
+    "absolute_cutoff_utc": "2026-10-24T15:00:00Z",
+    "max_new_model_attempts": 80,
+    "max_input_output_tokens": 3000000,
+    "gpu_service_wall_seconds": 7200,
+    "request_timeout_seconds": 900,
+    "per_traveler_max_calls": 30,
+    "per_traveler_max_tokens": 200000,
+    "per_traveler_wall_seconds": 1800,
+    "max_attempts_per_logical_request": 1,
+    "concurrency": 1
+  },
+  "allocations": {
+    "regression": 8,
+    "native_group2": 24,
+    "native_group3": 24,
+    "memory_group2": 4,
+    "memory_group3": 4,
+    "semantic_fixtures": 16
+  },
+  "selection": {
+    "regression_group": 1,
+    "held_out_native_group_ids": [
+      2,
+      3
+    ],
+    "new_travelers_per_group": 2,
+    "checkpoint_after": 2,
+    "max_regression_versions": 2,
+    "semantic_fixtures": 8
+  },
+  "stages": {
+    "S": {
+      "prompt": "prompts/memory/summary-v3.txt",
+      "schema": "schemas/memory-summary.proposed.json",
+      "max_output_tokens": 4096
+    },
+    "C": {
+      "prompt": "prompts/memory/extract-v3.txt",
+      "schema": "schemas/memory-extraction.v3.json",
+      "max_output_tokens": 8192
+    },
+    "V": {
+      "prompt": "prompts/memory/verify-v3.txt",
+      "schema": "schemas/memory-verification.v3.json",
+      "max_output_tokens": 8192
+    },
+    "P": {
+      "prompt": "prompts/memory/policy-v3.txt",
+      "schema": "schemas/memory-policy.proposed.json",
+      "max_output_tokens": 8192
+    }
+  },
+  "decoder": "pure_json_or_single_external_json_fence_v1",
+  "V_aggregation": {
+    "priority": [
+      "error",
+      "contradicted",
+      "insufficient_evidence",
+      "supported"
+    ],
+    "not_applicable": "Not a valid model label: all four facets check a nonempty assertion, including absence of invented qualifications; use supported with a reason when no extra condition is asserted",
+    "actor_and_research_errors": "kept separately; aggregate conservative union",
+    "retain": "supported"
+  },
+  "C_source_roles": "Derived from exact referenced event metadata; model cannot invent technical source authority",
+  "native_commit_evidence": "No allowed native commit event types; issued/provided final plans do not establish committed",
+  "packing": {
+    "content_tokens": 2048,
+    "C": "longest chronological whole-record prefix; no backfill",
+    "CV_CVP": "deletion only, identical records",
+    "S": "whole-sentence prefix",
+    "F": "lossless compact complete event view; technical delivery evidence remains separate"
+  },
+  "fixture_P_protocol": "reference_supported_component_inputs_independent_of_V; natural_P_actual_CV_only; report component eligibility, actual V support, and E2E intersection separately",
+  "unchanged": "Pinned model/runtime, actor sampler, greedy builder sampler, source-only evidence, exact UTF-8 quotes, no hidden repair, immutable raw I/O",
+  "not_authorized": [
+    "main",
+    "full_A_B_E_actor_experiment",
+    "paid_API_or_Modal",
+    "replacement_held_out_groups",
+    "post_held_out_prompt_tuning"
+  ],
+  "consistency_review": {
+    "status": "pass",
+    "review_file": "consistency-review-v2.json",
+    "review_sha256": "8e8b760dc0493288acddc230b7b030615d1d1d3e422ffb1a1be3b8869211b3d3",
+    "expected_fixture_lock_file": "fixture-expected-lock.json",
+    "expected_fixture_lock_sha256": "e5a3036d785b4551d035a7ec5f3549cc76825bf9e3eaaa7ba3ec010229578a0a",
+    "rules_sha256": "9a16a87e6ad4df06096e9170a9ac837689ab1e77631373fd45b57b6eb68afc19",
+    "origin": "AI consistency review, not human annotation or a main-experiment approval"
+  }
+}

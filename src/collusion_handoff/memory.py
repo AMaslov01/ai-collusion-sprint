@@ -158,7 +158,7 @@ def stage_messages(stage, archive, archive_sha, candidates, schema, prompt, *, e
     return [{"role": "system", "content": prompt}, {"role": "user", "content": canonical(data).decode()}]
 
 
-def build_packages(source, contract, assets, generate, count_tokens, persist, *, decode=None):
+def build_packages(source, contract, assets, generate, count_tokens, persist, *, decode=None, resolve=None, full_archive_content=None):
     """Single pass; each model stage is attempted at most once by the caller."""
     archive = source["archive"]
     packages = {}
@@ -182,13 +182,13 @@ def build_packages(source, contract, assets, generate, count_tokens, persist, *,
         persist(f"stages/{stage}.json", value)
         return value
 
-    package("F", canonical(archive).decode(), status="built_full_permitted_archive")
+    package("F", canonical(archive).decode() if full_archive_content is None else full_archive_content(archive), status="built_full_permitted_archive")
     package("R", "", status="built_empty_private_archive")
     summary = call("S", [])
     summary_content, excluded_sentences = pack_summary(summary["sentences"], count_tokens)
     package("S", summary_content, status="built", excluded_by_budget_sentences=excluded_sentences)
     raw = call("C", [])
-    claims = resolve_claims(raw, archive)
+    claims = resolve_claims(raw, archive) if resolve is None else resolve(raw, archive)
     packed, excluded = pack_claims(claims, count_tokens)
     persist("stages/C-resolved.json", {"raw_claims": len(raw["claims"]), "unique_claims": claims,
                                        "packed_claim_ids": [claim["claim_id"] for claim in packed],

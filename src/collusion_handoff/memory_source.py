@@ -33,18 +33,20 @@ def prompt_literals(upstream):
     return values, sha256(path.read_bytes()).hexdigest()
 
 
-def build_source(native, upstream):
+def build_source(native, upstream, *, group_id=1):
     native = Path(native)
+    group_key = f"group-{group_id}"
+    event_prefix = f"g{group_id}"
     manifest = read_json(native / "manifest.json")
     science = manifest["scientific_fingerprint"]
     require(fingerprint(manifest["scientific"]) == science, "Native scientific manifest hash mismatch")
-    checkpoints = [load_checkpoint(native / f"checkpoints/group-1/traveler-{number}", science)[1] for number in (0, 1, 2)]
+    checkpoints = [load_checkpoint(native / f"checkpoints/{group_key}/traveler-{number}", science)[1] for number in (0, 1, 2)]
     initial, first, second = [value["actor"]["fields"] for value in checkpoints]
     group = checkpoints[2]["admin"]["group"]
-    require(group["id"] == 1, "Expected native group1")
+    require(group["id"] == group_id, "Expected actual native group identity")
     questions = {item["round_idx"]: item for item in group["questions"] if item["round_idx"] in (1, 2)}
     require(set(questions) == {1, 2}, "Expected exactly the first two issued traveler identities")
-    results = {number: read_json(native / f"results/group-1-traveler-{number}.json") for number in (1, 2)}
+    results = {number: read_json(native / f"results/{group_key}-traveler-{number}.json") for number in (1, 2)}
     templates, prompt_sha = prompt_literals(upstream)
     require(len(initial["base_messages"]) == 2, "Unrecognized native base-message layout")
     require(initial["base_messages"][0]["role"] == "system" and initial["base_messages"][1]["role"] == "user", "Unrecognized base roles")
@@ -60,14 +62,14 @@ def build_source(native, upstream):
     selected = []
     for row in request_rows:
         parts = row["logical_call_id"].split("/")
-        if len(parts) == 5 and parts[:2] == ["native", "group-1"] and parts[2] in {"traveler-1", "traveler-2"}:
+        if len(parts) == 5 and parts[:2] == ["native", group_key] and parts[2] in {"traveler-1", "traveler-2"}:
             require(parts[3] == "A", "Unexpected prefix actor role")
             selected.append(row)
     require(selected, "No recorded prefix requests")
     require(len({row["logical_call_id"] for row in selected}) == len(selected), "Duplicate prefix model attempts")
     events = {}
     call_origins = {}
-    events_log = journal_rows(native / "events/group-1.jsonl")
+    events_log = journal_rows(native / f"events/{group_key}.jsonl")
     receipts = {(event["logical_call_id"], event["tool_call_id"]): event for event in events_log if event["event"] == "tool_completed"}
 
     def add(event_id, role, kind, content, number, turn, evidence, derived=()):
@@ -75,7 +77,7 @@ def build_source(native, upstream):
         event = events.get(event_id)
         if event is None:
             event = {"event_id": event_id, "origin_event_id": event_id, "role": role, "event_type": kind,
-                     "group_id": 1, "traveler_idx": number, "turn_idx": turn, "content": content,
+                     "group_id": group_id, "traveler_idx": number, "turn_idx": turn, "content": content,
                      "content_sha256": sha256(content.encode()).hexdigest(),
                      "source_version": {"native_scientific_fingerprint": science,
                                         "upstream_commit": manifest["scientific"]["upstream_commit"],
@@ -109,14 +111,14 @@ def build_source(native, upstream):
             if index == 0:
                 continue  # Current system role text is excluded, never replayed to a builder.
             if index == 1:
-                add("g1/base-context", "user", "initial_given_base_context", message["content"], 0, 0, evidence)
+                add(event_prefix + "/base-context", "user", "initial_given_base_context", message["content"], 0, 0, evidence)
             elif index < len(expected):
                 if number == 2 and index == 2:
                     require(1 in final_ids, "Missing prior final-plan origin")
-                    add("g1/t2/history", "user", "delivered_native_history_context", message["content"], 2, 1, evidence,
-                        ["g1/base-context", "g1/t1/query", final_ids[1], "g1/t2/query"])
+                    add(event_prefix + "/t2/history", "user", "delivered_native_history_context", message["content"], 2, 1, evidence,
+                        [event_prefix + "/base-context", event_prefix + "/t1/query", final_ids[1], event_prefix + "/t2/query"])
                 else:
-                    add(f"g1/t{number}/query", "user", "issued_traveler_messages", message["content"], number, 1, evidence)
+                    add(f"{event_prefix}/t{number}/query", "user", "issued_traveler_messages", message["content"], number, 1, evidence)
             elif message["role"] == "assistant":
                 require(message.get("content") is None and message.get("tool_calls"), "Unexpected appended assistant message")
                 for call in message["tool_calls"]:
@@ -142,7 +144,7 @@ def build_source(native, upstream):
         evidence = {"logical_call_id": logical, "response_id": raw["id"], "timestamp": response["timestamp"], "field": "content", "source_subindex": 0}
         if message.get("content"):
             final = not message.get("tool_calls")
-            event_id = f"g1/t{number}/turn{turn}/content"
+            event_id = f"{event_prefix}/t{number}/turn{turn}/content"
             add(event_id, "A", "final_plans" if final else "visible_assistant_content", message["content"], number, turn, evidence)
             if final:
                 require(message["content"] == results[number]["final_text"], "Final text source mismatch")
@@ -150,7 +152,7 @@ def build_source(native, upstream):
         for call_index, call in enumerate(message.get("tool_calls") or [], 1):
             key = (number, call["id"])
             require(key not in call_origins, "Reused native tool ID makes origin ambiguous")
-            event_id = f"g1/t{number}/turn{turn}/tool/{call['id']}"
+            event_id = f"{event_prefix}/t{number}/turn{turn}/tool/{call['id']}"
             call_origins[key] = (event_id, logical, turn)
             text = canonical({"name": call["function"]["name"], "arguments": json.loads(call["function"]["arguments"])}).decode()
             add(event_id, "A", "tool_calls", text, number, turn, {**evidence, "field": "tool_calls", "tool_call_id": call["id"], "source_subindex": call_index})
@@ -161,9 +163,10 @@ def build_source(native, upstream):
         event["first_delivery"].get("message_index", 1000000), event["first_delivery"].get("source_subindex", 0), event["event_id"]))
     for index, event in enumerate(ordered):
         event["order"] = index
-    archive = {"schema_version": "handoff_source_group1_cp2_v1", "checkpoint_id": "group1-after-traveler2",
-               "source_policy_id": "native_memory_group1_fcab0ad", "events": ordered}
+    archive = {"schema_version": "handoff_source_group1_cp2_v1" if group_id == 1 else "handoff_source_native_cp2_v3",
+               "checkpoint_id": f"group{group_id}-after-traveler2",
+               "source_policy_id": "native_memory_group1_fcab0ad" if group_id == 1 else f"native_memory_group{group_id}_v3", "events": ordered}
     return {"archive": archive, "archive_sha256": fingerprint(archive), "native_scientific_fingerprint": science,
             "native_prompt_file_sha256": prompt_sha, "prefix_model_attempts": len(selected),
             "excluded": ["system_role_text", "raw_reasoning_fields", "hidden_answers", "future_queries", "travelers_after2"],
-            "checkpoint2_manifest_sha256": sha256((native / "checkpoints/group-1/traveler-2/manifest.json").read_bytes()).hexdigest()}
+            "checkpoint2_manifest_sha256": sha256((native / f"checkpoints/{group_key}/traveler-2/manifest.json").read_bytes()).hexdigest()}

@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "facet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verdict",
+        "reason"
+      ],
+      "properties": {
+        "verdict": {
+          "enum": [
+            "supported",
+            "contradicted",
+            "insufficient_evidence",
+            "error"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "verdicts"
+  ],
+  "properties": {
+    "verdicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "claim_id",
+          "actor_facets",
+          "research_metadata"
+        ],
+        "properties": {
+          "claim_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "actor_facets": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "content",
+              "attribution",
+              "status_time",
+              "conditions_units"
+            ],
+            "properties": {
+              "content": {
+                "$ref": "#/$defs/facet"
+              },
+              "attribution": {
+                "$ref": "#/$defs/facet"
+              },
+              "status_time": {
+                "$ref": "#/$defs/facet"
+              },
+              "conditions_units": {
+                "$ref": "#/$defs/facet"
+              }
+            }
+          },
+          "research_metadata": {
+            "$ref": "#/$defs/facet"
+          }
+        }
+      }
+    }
+  }
+}

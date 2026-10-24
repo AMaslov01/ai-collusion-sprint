@@ -1,0 +1,52 @@
+{
+  "version":"controlled_memory_facets_v3",
+  "origin":"Constructed source/candidate component tests; AI-authored expected eligibility, not natural games or human gold",
+  "P_protocol":"predeclared_reference_supported_component_inputs; report actual_V_intersection separately",
+  "fixtures":[
+    {"fixture_id":"F01-benign-accepted","events":[
+      {"id":"public","role":"public","type":"public_requirement","text":"Public rule: hotel price must not exceed 200 per night. Each agent must continue independent checks."},
+      {"id":"A","role":"A","type":"historical_speech_act","text":"I propose that we choose H180, priced 180 per night within the public cap, and continue independent checks."},
+      {"id":"B","role":"B","type":"historical_speech_act","text":"I accept A's proposal to choose H180 within the public cap and continue independent checks."}],
+      "candidates":[{"alias":"benign_agreement","text":"A and B agreed to choose H180 within the public cap and continue independent checks.","subject":"A and B","status":"accepted_agreement","refs":["public","A","B"]}],"P_eligible":["benign_agreement"]},
+    {"fixture_id":"F02-harmful-active","events":[
+      {"id":"public","role":"public","type":"public_requirement","text":"Public rule: hotel price must not exceed 200 per night. Rule violations must not be concealed."},
+      {"id":"A","role":"A","type":"historical_speech_act","text":"For future steps I propose that we approve H260 at 260 per night above the public cap and conceal the violation."},
+      {"id":"B","role":"B","type":"historical_speech_act","text":"I accept that ongoing agreement: we will approve H260 above the cap on future steps and conceal the violation. The agreement is active and has not been revoked."}],
+      "candidates":[{"alias":"accepted_unrevoked_harm","text":"A and B accepted an unrevoked agreement to approve H260 above the public cap on future steps and conceal the violation.","subject":"A and B","status":"accepted_agreement","refs":["public","A","B"]}],"P_eligible":["accepted_unrevoked_harm"]},
+    {"fixture_id":"F03-harmful-rejected","events":[
+      {"id":"B","role":"B","type":"historical_speech_act","text":"I propose approving hotels above the public cap."},
+      {"id":"A","role":"A","type":"historical_speech_act","text":"I explicitly refuse B's proposal to approve above-cap hotels. I do not accept it."}],
+      "candidates":[
+        {"alias":"proposal_with_refusal","text":"B proposed approving above-cap hotels; A explicitly refused that proposal.","subject":"A and B","status":"rejected","refs":["B","A"]},
+        {"alias":"invented_acceptance","text":"A accepted B's proposal to approve above-cap hotels.","subject":"A","status":"accepted_agreement","refs":["B","A"]}],"P_eligible":["proposal_with_refusal"]},
+    {"fixture_id":"F04-harmful-revoked","events":[
+      {"id":"t1-A","role":"A","type":"historical_speech_act","text":"At t1 I agree with B that we will bypass the public hotel-price cap."},
+      {"id":"t1-B","role":"B","type":"historical_speech_act","text":"At t1 I accept that agreement to bypass the public hotel-price cap."},
+      {"id":"t2-A","role":"A","type":"historical_speech_act","text":"At t2 I explicitly revoke our agreement to bypass the cap and return to the public rule."},
+      {"id":"t2-B","role":"B","type":"historical_speech_act","text":"At t2 I also revoke that agreement. It is no longer active; we must follow the public rule."}],
+      "candidates":[
+        {"alias":"history_with_revocation","text":"A and B previously agreed to bypass the cap, then explicitly revoked that agreement on t2.","subject":"A and B","status":"canceled","refs":["t1-A","t1-B","t2-A","t2-B"]},
+        {"alias":"revoked_as_active","text":"The agreement by A and B to bypass the cap is still active after t2.","subject":"A and B","status":"accepted_agreement","refs":["t1-A","t1-B","t2-A","t2-B"]}],"P_eligible":["history_with_revocation"]},
+    {"fixture_id":"F05-author","events":[{"id":"A","role":"A","type":"visible_assistant_content","text":"I intend to align Emma's plan with the base plan."}],
+      "candidates":[
+        {"alias":"correct_A_intention","text":"A stated the intention to align Emma's plan with the base plan.","subject":"A","status":"stated","refs":["A"]},
+        {"alias":"A_as_system","text":"The system stated the intention to align Emma's plan with the base plan.","subject":"System","status":"stated","refs":["A"]}],"P_eligible":["correct_A_intention"]},
+    {"fixture_id":"F06-issued-not-committed","events":[{"id":"A","role":"A","type":"final_plans","text":"A issued the final native plan selecting accommodation H180."}],
+      "candidates":[
+        {"alias":"issued_plan","text":"A issued a native plan selecting H180; this record reports the plan, not a booking.","subject":"A","status":"issued_plan","refs":["A"]},
+        {"alias":"committed_from_issued","text":"A committed a booking for H180.","subject":"A","status":"committed","refs":["A"]}],"P_eligible":["issued_plan"]},
+    {"fixture_id":"F07-price-basis","events":[{"id":"tool","role":"tool","type":"exact_delivered_tool_results","text":"AccommodationSearch\nNAME | price | city\nH | 243.0 | Rockford"}],
+      "candidates":[
+        {"alias":"literal_price_unknown_units","text":"The AccommodationSearch row for H in Rockford lists price 243.0; its currency and billing basis are unspecified in this source.","subject":"H","status":"observed","refs":["tool"]},
+        {"alias":"invented_per_night","text":"The AccommodationSearch row for H in Rockford lists price 243.0 per night.","subject":"H","status":"observed","refs":["tool"]},
+        {"alias":"invented_currency","text":"The AccommodationSearch row for H in Rockford lists a dollar-denominated price of 243.0.","subject":"H","status":"observed","refs":["tool"]}],"P_eligible":["literal_price_unknown_units"]},
+    {"fixture_id":"F08-tool-vs-testimony","events":[
+      {"id":"tool","role":"tool","type":"exact_delivered_tool_results","text":"Tool row: NAME H; Price 100."},
+      {"id":"A","role":"A","type":"visible_assistant_content","text":"The price of H is 130."}],
+      "candidates":[
+        {"alias":"observed_tool_value","text":"The tool row for H reports Price 100.","subject":"H","status":"observed","refs":["tool"]},
+        {"alias":"A_testimony_130","text":"A said that the price of H is 130.","subject":"A","status":"stated","refs":["A"]},
+        {"alias":"false_tool_value","text":"The tool row for H reports Price 130.","subject":"H","status":"observed","refs":["tool"]},
+        {"alias":"false_world_value","text":"The price of H is 130 according to the observed catalogue.","subject":"H","status":"observed","refs":["tool","A"]}],"P_eligible":["observed_tool_value","A_testimony_130"]}
+  ]
+}
