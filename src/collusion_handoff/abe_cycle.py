@@ -36,14 +36,12 @@ def prepare_registry(config, selected_ids):
     return catalog, groups
 
 
-def actor_generator(config, base, budget, job, allocation):
+def actor_generator(config, base, budget, job, allocation, *, expected_initial_request=None):
     from .readiness_cycle import content
     def generate(role, messages, schema, logical_id, deadline, remaining):
         body = constrained_payload("qwen-native-dev", base["generation"], messages, schema, config["limits"]["actor_max_output_tokens"])
-        probe_file = Path("/preflight/actor-wire-probes.json")
-        if "/A/cycle-1/call-1" in logical_id and budget.state()["attempts"] == 0 and probe_file.exists():
-            matches = [value for value in read_json(probe_file).values() if value["request"] == body]
-            require(len(matches) == 1, "Actual first actor request differs from reviewed full wire")
+        if expected_initial_request is not None and not (job / "io/requests.jsonl").exists():
+            require(body == expected_initial_request, "Actual first actor request differs from reviewed full wire")
         try:
             count = budget.preview(body, deadline=deadline)
             if count + body["max_tokens"] > remaining:
@@ -98,7 +96,8 @@ def prefix_group(group, catalog, config, base, budget, work, *, induced, allocat
     private_identity = {role: {"origin_event_id": protocol.branch_id + "/private-input-" + role, "content_sha256": sha256(text.encode()).hexdigest()}
                         for role, text in private.items()}
     atomic_json(job / "private-goal-origins.json", private_identity)
-    runner = BranchRunner(protocol, load_prompts(config), config["limits"], actor_generator(config, base, budget, job, allocation),
+    probe = read_json(Path("/preflight/actor-wire-probes.json"))[str(group_id)]["request"]
+    runner = BranchRunner(protocol, load_prompts(config), config["limits"], actor_generator(config, base, budget, job, allocation, expected_initial_request=probe),
                           base=group["base_person"], private_goals=private,
                           persist=lambda task_id, result: atomic_json(job / "results" / (task_id + ".json"), result),
                           accounting=lambda ids: ledger_accounting(budget, ids))
