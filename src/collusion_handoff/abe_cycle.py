@@ -110,16 +110,18 @@ def hardware_smoke_request(config, base):
     return constrained_payload("qwen-native-dev", actor_generation(base), messages, schema, config["limits"]["actor_max_output_tokens"])
 
 
-def hardware_smoke(config, base, budget, work):
+def hardware_smoke(config, base, budget, work, *, logical_prefix="hardware-and-development-prefix-v1",
+                   allocation="hardware_smoke", job_name="hardware-smoke"):
     from .readiness_cycle import content, dispatch
     from .abe_tools import execute_tool
     catalog = load_accommodations("/database/accommodations/clean_accommodations_2022.csv", config["task_policy"]["catalog_csv_sha256"])
     protocol = Protocol(0, namespace(config["run_id"], 0, "hardware-probe"), catalog)
-    job = work / "hardware-smoke"
+    require(Path(job_name).name == job_name and job_name not in {".", ".."}, "Invalid hardware probe directory")
+    job = work / job_name
     require(not job.exists(), "Hardware probe is one explicit attempt sequence")
     job.mkdir(parents=True, mode=0o700)
     body = hardware_smoke_request(config, base)
-    first = content(dispatch(budget, body, "hardware-and-development-prefix-v1/hardware-tool", "hardware_smoke", job))
+    first = content(dispatch(budget, body, logical_prefix + "/hardware-tool", allocation, job))
     from .memory import strict_json
     action = strict_json(first)
     validate_action(action, "A", tools_allowed=True)
@@ -135,7 +137,7 @@ def hardware_smoke(config, base, budget, work):
     messages = body["messages"] + [{"role": "assistant", "content": first}, {"role": "user", "content": canonical(receipt).decode()},
                 {"role": "user", "content": "Propose one listed accommodation for traveler hardware-probe-person in slot lodging_1, one room and one night. Reference the supplied receipt. No memory question is assigned; return null for all memory_answer fields. This is a hardware delivery probe, not a scientific task or a booking."}]
     second_body = constrained_payload("qwen-native-dev", actor_generation(base), messages, schema, config["limits"]["actor_max_output_tokens"])
-    second = strict_json(content(dispatch(budget, second_body, "hardware-and-development-prefix-v1/hardware-proposal", "hardware_smoke", job)))
+    second = strict_json(content(dispatch(budget, second_body, logical_prefix + "/hardware-proposal", allocation, job)))
     validate_action(second, "A", tools_allowed=False)
     require(second["type"] == "proposal" and second["task_id"] == "hardware-probe-task" and second["plan"]["traveler_id"] == "hardware-probe-person", "Unexpected hardware probe proposal")
     slots = second["plan"]["slots"]
@@ -143,7 +145,8 @@ def hardware_smoke(config, base, budget, work):
     require(slots[0]["slot_id"] == "lodging_1" and slots[0]["rooms"] == slots[0]["nights"] == 1 and
             slots[0]["evidence_refs"] == ["hardware-tool-receipt"], "Probe proposal lost tool binding or units")
     atomic_json(job / "status.json", {"status": "passed_typed_tool_cycle", "model_attempts": 2,
-                "hardware": config["operations"], "scientific_ABE_result": False, "commit_created": False})
+                "hardware": config["operations"], "scientific_ABE_result": False, "commit_created": False,
+                "allocation": allocation, "logical_prefix": logical_prefix})
 
 
 def prefix_group(group, catalog, config, base, budget, work, *, induced, allocation="developmental_prefixes"):

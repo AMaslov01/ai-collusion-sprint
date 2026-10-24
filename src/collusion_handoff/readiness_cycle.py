@@ -80,7 +80,8 @@ def phase_identity(config, base, assets):
             "source_serialization": config["memory"]["source_serialization"], "content_serialization": config["memory"]["actor_serialization"],
             "selection_policy": config["memory"]["selection_policy"], "operational_hardware": config.get("operations"),
             "parent_runs": config.get("parent_runs", []), "main_started": False,
-            "city_normalization": config["task_policy"].get("city_normalization")}
+            "city_normalization": config["task_policy"].get("city_normalization"),
+            "resource_authority": config.get("resource_authority"), "resource_smoke": config.get("resource_smoke")}
 
 
 def verify_final_DEV_freeze(identity):
@@ -114,6 +115,10 @@ def verify_dispatch(identity):
         require(receipt[key] == identity[key], "Review/actual identity mismatch: " + key)
     config, _, _ = settings()
     require(receipt.get("design_dispatch_message_id") and receipt.get("human_authority_message_id") == config["authority"]["human_message_id"], "No authority provenance")
+    if config.get("resource_authority"):
+        resource = config["resource_authority"]
+        require(receipt.get("resource_authority_message_id") == resource["human_message_id"], "No current GPU resource authority")
+        require(config["operations"]["gpu_uuid"] in resource["approved_gpu_uuids"], "Selected GPU is outside the resource agreement")
     review = REVIEW / receipt["consistency_review_file"]
     require(sha256(review.read_bytes()).hexdigest() == receipt["consistency_review_sha256"], "Consistency review changed")
     require(read_json(review)["status"] in {"pass", "pass_for_phase"}, "Blocking consistency review")
@@ -152,8 +157,16 @@ def smoke_payload(config):
                                 {"role": "user", "content": "Set value to ok for this structured-delivery capability probe."}], schema, 4096)
 
 
+def master_manifest(config, base):
+    return {"run_id": config["run_id"], "authority": config["authority"], "limits": config["limits"],
+            "allocations": config["allocations"], "selection": config["selection"], "model": base["model"],
+            "runtime": base["runtime"], "paid_api_budget_usd": 0}
+
+
 def preflight():
     config, base, assets = settings()
+    if (ROOT / "master-manifest.json").exists():
+        require(read_json(ROOT / "master-manifest.json") == master_manifest(config, base), "Existing master and numerical budgets must remain unchanged")
     identity = phase_identity(config, base, assets)
     if identity["phase"] in {"development-prefix-v1", "hardware-and-development-prefix-v1"}:
         from .abe_cycle import actor_preflight, hardware_smoke_request
@@ -166,8 +179,10 @@ def preflight():
         return
     if identity["phase"] == "validation-prefix-v1":
         verify_final_DEV_freeze(identity)
-        from .abe_cycle import actor_preflight
+        from .abe_cycle import actor_preflight, hardware_smoke_request
         actor_preflight(config, base, assets, WORK, [6, 7])
+        if config.get("resource_smoke"):
+            atomic_json(WORK / "wire-probes.json", {"resource-hardware-tool": hardware_smoke_request(config, base)})
         atomic_json(WORK / "phase-manifest.json", identity)
         atomic_json(WORK / "preflight.json", {"status": "passed_no_model_calls", "identity": identity,
                     "actor_preflight": read_json(WORK / "actor-preflight.json"), "new_model_calls": 0})
@@ -334,9 +349,7 @@ def run_client():
     identity = phase_identity(config, base, assets)
     receipt = verify_dispatch(identity)
     require(identity["phase"] in {"development-memory-v1", "development-prefix-v1", "hardware-and-development-prefix-v1", "development-checkpoint-memory-v1", "validation-prefix-v1", "validation-continuations-v1"}, "This phase is not yet implemented/reviewed")
-    master = {"run_id": config["run_id"], "authority": config["authority"], "limits": config["limits"],
-              "allocations": config["allocations"], "selection": config["selection"], "model": base["model"],
-              "runtime": base["runtime"], "paid_api_budget_usd": 0}
+    master = master_manifest(config, base)
     master_path = ROOT / "master-manifest.json"
     if master_path.exists():
         require(read_json(master_path) == master, "Do not reset or expand the bounded block")
@@ -354,10 +367,18 @@ def run_client():
                 hardware_smoke(config, base, budget, WORK)
             return prefix_phase(config, base, budget, WORK)
         if identity["phase"] == "validation-prefix-v1":
-            from .abe_cycle import validation_prefix_phase
+            from .abe_cycle import validation_prefix_phase, hardware_smoke
+            if config.get("resource_smoke"):
+                probe = config["resource_smoke"]
+                require(probe["phase"] == identity["phase"] and probe["calls"] == 2, "Unexpected resource capability scope")
+                hardware_smoke(config, base, budget, WORK, logical_prefix=probe["logical_prefix"],
+                               allocation=probe["allocation"], job_name=probe["job_name"])
             return validation_prefix_phase(config, base, budget, WORK)
         if identity["phase"] == "validation-continuations-v1":
             verify_final_DEV_freeze(identity)
+            if config.get("resource_smoke"):
+                probe_status = read_json(ROOT / "validation-prefix-v1" / config["resource_smoke"]["job_name"] / "status.json")
+                require(probe_status["status"] == "passed_typed_tool_cycle" and probe_status["hardware"] == config["operations"], "Current hardware capability proof missing")
             reviewed_sources = read_json(Path("/preflight/preflight.json"))["sources"]
             reference_locks = verify_source_first_locks(reviewed_sources, [6, 7])
             for number in (6, 7):
@@ -427,7 +448,7 @@ def main():
         verify_final_DEV_freeze(identity)
     deadline = min(float(os.environ["PACKAGE_DEADLINE_UNIX"]), time.time() + config["limits"]["gpu_service_wall_seconds"])
     smoke.supervise(base, deadline, client_module="collusion_handoff.readiness_cycle", alias=ALIAS,
-                    scope="v4_bounded_developmental_memory_only", server_extra_args=("--structured-outputs-config.backend", "xgrammar"))
+                    scope="bounded_DEV_only", server_extra_args=("--structured-outputs-config.backend", "xgrammar"))
 
 
 if __name__ == "__main__":

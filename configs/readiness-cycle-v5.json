@@ -11,6 +11,25 @@
     "limits_origin": "Coordinator-selected ceilings for the new authorized DEV block, not verbatim human numeric limits"
   },
   "base_runtime_config": "configs/dev-package.draft.json",
+  "resource_authority": {
+    "human_thread_id": "01a1688e-8fee-7140-b505-6f93e571c740",
+    "human_message_id": "01a16fbc-2ce7-7ea0-9788-7ee13ffa4f2c",
+    "verification": "Direct read_thread of human approval for GPU3 and GPU4; GPU0 no longer used",
+    "approved_gpu_uuids": [
+      "GPU-c15d4e7a-29b2-896a-f7bf-3d1a528040a5",
+      "GPU-31a471eb-a3b0-032b-8b74-9bd805c42af3"
+    ],
+    "selected_policy": "One GPU3 L40S, TP1 and concurrency1. GPU4 is an unused reserve. Original overall DEV limits and master ledger remain in force."
+  },
+  "resource_smoke": {
+    "phase": "validation-prefix-v1",
+    "calls": 2,
+    "logical_prefix": "validation-prefix-v1/hardware-smoke-l40s-r2",
+    "job_name": "hardware-smoke-l40s-r2",
+    "allocation": "reviewed_targeted_repairs",
+    "required_before_scientific_prefix_calls": true,
+    "classification": "Additional hardware capability attempts from the unchanged reserve22; not repeated H100 hardware_smoke allocation"
+  },
   "limits": {
     "absolute_cutoff_utc": "2026-10-25T12:00:00Z",
     "max_new_model_attempts": 400,
@@ -239,10 +258,10 @@
   ],
   "operations": {
     "server": "caniculus.appliedai.local",
-    "gpu_index_at_inspection": 0,
-    "gpu_uuid": "GPU-1ea36751-5cc4-4522-aa5e-55350c485c0c",
-    "gpu_name": "NVIDIA H100 PCIe",
-    "reservation_origin": "Explicit human GPU0 agreement in authority message",
+    "gpu_index_at_inspection": 3,
+    "gpu_uuid": "GPU-c15d4e7a-29b2-896a-f7bf-3d1a528040a5",
+    "gpu_name": "NVIDIA L40S",
+    "reservation_origin": "Explicit human GPU3/4 agreement in resource_authority; selected GPU3 only",
     "channel_notified": true,
     "cpu_limit": 8,
     "RAM_limit_GiB": 64,
@@ -251,7 +270,7 @@
     "pids_limit": 1024,
     "network_transfer_KiBps": 5000
   },
-  "hardware_identity": "H100 new hardware freeze; prior L40 results reported separately, same model/image/precision/context/samplers",
+  "hardware_identity": "L40S final DEV hardware segment; H100 26 calls/217037 tokens/1091 allocated seconds remain closed historical development evidence. No pooling as one hardware freeze. Same model/image/precision/context/samplers; cumulative v5 ledger and budgets preserved.",
   "hardware_smoke": {
     "calls": 2,
     "kind": "Typed actor tool-request → actual canonical tool receipt → typed proposal; no commit or scientific task outcome",

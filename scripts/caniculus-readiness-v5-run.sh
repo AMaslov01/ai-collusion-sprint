@@ -21,7 +21,6 @@ CAN_IDENTITIES="$CAN_PROJECT/bootstrap/preparation-31f9c028bd8615c4b7648144c278e
 CAN_VENDOR="$CAN_PROJECT/dependencies/travel-tools-d0bc2174eea3b3737f6922b89897db4f21ea6f835f7354ee702edbbc9880b3bc"
 CAN_TASKS="$CAN_PROJECT/bootstrap/preparation-33d29710c408fd9851e9de0db5e436cc623b595c/task-data"
 CAN_UPSTREAM=/opt/ai-collusion/sources/MemoryArena
-CAN_UUID=GPU-1ea36751-5cc4-4522-aa5e-55350c485c0c
 CAN_EXTRA_MOUNTS=()
 if [[ "$CAN_PHASE" == validation-* ]]; then
  CAN_FRESH="$CAN_PROJECT/inputs/readiness-v4-fresh-b0e42d7d"
@@ -34,6 +33,9 @@ for CAN_PATH in "$CAN_PROJECT" "$CAN_CODE" "$CAN_ROOT" "$CAN_PREFLIGHT" "$CAN_RE
  test "$(realpath "$CAN_PATH")" = "$CAN_PATH"
  test "$(stat -c %u "$CAN_PATH")" = "$(id -u)"
 done
+CAN_CONFIG="$CAN_CODE/configs/readiness-cycle-v5.json"
+CAN_UUID=$(jq -r .operations.gpu_uuid "$CAN_CONFIG")
+jq -e --arg gpu "$CAN_UUID" '.resource_authority.approved_gpu_uuids | index($gpu) != null' "$CAN_CONFIG" >/dev/null
 exec 9>"$CAN_ROOT/launch.lock"
 flock -n 9
 test ! -e "$CAN_PROJECT/bootstrap/control/STOP"
@@ -41,6 +43,8 @@ test "$(jq -r .status "$CAN_PREFLIGHT/preflight.json")" = passed_no_model_calls
 test "$(jq -r .code_commit "$CAN_PREFLIGHT/phase-manifest.json")" = "$CAN_SHA"
 test "$(jq -r .status "$CAN_REVIEW/dispatch-$CAN_PHASE.json")" = authorized_bounded_DEV_phase
 test "$(jq -r .code_commit "$CAN_REVIEW/dispatch-$CAN_PHASE.json")" = "$CAN_SHA"
+test "$(sha256sum "$CAN_CONFIG" | cut -d ' ' -f1)" = "$(jq -r .config_sha256 "$CAN_REVIEW/dispatch-$CAN_PHASE.json")"
+test "$(jq -r .resource_authority_message_id "$CAN_REVIEW/dispatch-$CAN_PHASE.json")" = "$(jq -r .resource_authority.human_message_id "$CAN_CONFIG")"
 test ! -e "$CAN_ROOT/$CAN_PHASE.started"
 test -z "$(docker ps --filter label=owner=a.maslov --filter label=scope=readiness-cycle-v5 --filter label=computation=gpu --format '{{.Names}}')"
 test -z "$(nvidia-smi --id="$CAN_UUID" --query-compute-apps=pid --format=csv,noheader)"
