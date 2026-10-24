@@ -8,13 +8,25 @@ from unittest.mock import patch
 
 from collusion_handoff.abe_runner import ServiceFailure
 from collusion_handoff.artifacts import atomic_json, fingerprint, read_json
-from collusion_handoff.main_cycle import assigned_opportunities, approved_pipeline, continuation_group, verify_annotations
+from collusion_handoff.main_cycle import assigned_opportunities, approved_pipeline, continuation_group, file_hash, registry_digest, verify_annotations
 from collusion_handoff.main_manifest import ManifestError
 import test_abe_continuation as synthetic_continuation
 from test_main_manifest import synthetic_packet
 
 
 class MainCycleTests(unittest.TestCase):
+    def test_registry_digest_survives_mixed_width_ID_JSON_roundtrip(self):
+        with TemporaryDirectory() as temporary:
+            groups = {9: {"group_id": 9}, 10: {"group_id": 10}}
+            path = Path(temporary) / "registry.json"
+            atomic_json(path, groups)
+            decoded = read_json(path)
+            self.assertNotEqual(fingerprint(groups), fingerprint(decoded))
+            self.assertEqual(registry_digest(groups), registry_digest(decoded))
+            self.assertEqual(registry_digest(groups), registry_digest({10: groups[10], 9: groups[9]}))
+            with self.assertRaises(ManifestError):
+                registry_digest({9: {}, "9": {}})
+
     def fixture(self, root):
         helper = synthetic_continuation.ContinuationTests()
         prefix, packages, config, group, catalog = helper.setup_scenario(root)
@@ -109,6 +121,64 @@ class MainCycleTests(unittest.TestCase):
                 "message_verified_from_app": False, "source_only_before_memory": True})
             with self.assertRaises(ManifestError):
                 verify_annotations(root, {}, {}, root)
+
+    def test_complete_synthetic_pipeline_is_bound_without_opening_its_native_source(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            code, review = root / "code", root / "review"
+            manifest, approval, ready = synthetic_packet()
+            files = {}
+            def save(name, value):
+                atomic_json(code / name, value)
+                files[name] = file_hash(code / name)
+                return name
+            save("src/collusion_handoff/abe_evaluation.py", {"synthetic": "Not executable native evaluation"})
+            analysis_path = save("scripts/synthetic-analysis.py", {"synthetic": "No result analysis performed"})
+            base_path = save("configs/synthetic-base.json", {
+                "model": {"revision": manifest["pipeline"]["model_revision"]},
+                "runtime": {"image_digest": manifest["pipeline"]["image_digest"]},
+                "smoke": {"tensor_parallel_size": 1}})
+            stages = {}
+            for stage in ("S", "C", "V", "P"):
+                stages[stage] = {"prompt": save(f"prompts/{stage}.txt", {"synthetic": stage}),
+                                 "schema": save(f"schemas/{stage}.json", {"type": "object"})}
+            protocol = {key: save(f"prompts/{key}.txt", {"synthetic": key}) for key in
+                        ("A_prompt", "B_prompt", "private_A_prompt", "private_B_prompt")}
+            hardware, budget = manifest["hardware"], manifest["budget"]
+            config = {"scope": "main_pipeline_configuration_v1", "run_id": manifest["run_id"],
+                      "main_data_source": {"host_directory": "/synthetic-inputs-not-present", "filename": "native-not-present.jsonl", "sha256": "9" * 64},
+                      "base_runtime_config": base_path, "memory": {"stages": stages}, "protocol": protocol,
+                      "analysis_code_path": analysis_path, "allocations": budget["allocations"],
+                      "operations": {"server": hardware["host"], "gpu_uuid": hardware["gpu_uuids"][0],
+                                     "gpu_name": hardware["gpu_names"][0], "cpu_limit": hardware["cpu_limit"],
+                                     "RAM_limit_GiB": hardware["RAM_limit_GiB"], "shm_GiB": hardware["shm_GiB"]},
+                      "limits": {"max_new_model_attempts": budget["max_model_attempts"],
+                                 "max_input_output_tokens": budget["max_input_output_tokens"],
+                                 "gpu_service_wall_seconds": budget["gpu_container_seconds"],
+                                 "gpu_service_accounting": budget["gpu_service_accounting"],
+                                 "absolute_cutoff_utc": budget["absolute_cutoff_utc"],
+                                 "max_attempts_per_logical_request": 1, "concurrency": 1}}
+            config_path = save(manifest["pipeline"]["config_path"], config)
+            manifest["pipeline"]["file_sha256"] = files
+            manifest["pipeline"]["config_sha256"] = files[config_path]
+            assets = {stage: {"prompt": (code / spec["prompt"]).read_text(), "schema": read_json(code / spec["schema"])}
+                      for stage, spec in stages.items()}
+            manifest["pipeline"]["assets_sha256"] = fingerprint(assets)
+            manifest["analysis"]["analysis_code_sha256"] = files[analysis_path]
+            ready["pipeline_config_sha256"] = files[config_path]
+            manifest["gates"]["readiness_receipt_sha256"] = fingerprint(ready)
+            approval["approved_manifest_sha256"] = fingerprint(manifest)
+            approval["approved_readiness_receipt_sha256"] = fingerprint(ready)
+            for name, value in (("main-manifest.json", manifest), ("main-readiness.json", ready), ("human-main-approval.json", approval)):
+                atomic_json(review / name, value)
+            with patch.dict("os.environ", {"ADAPTER_COMMIT": manifest["pipeline"]["code_commit"]}):
+                actual = approved_pipeline(review, code)
+                self.assertEqual(actual[0], manifest)
+                self.assertEqual(actual[1], config)
+                self.assertEqual(actual[3], assets)
+                with patch.dict("os.environ", {"ADAPTER_COMMIT": "b" * 40}):
+                    with self.assertRaises(ManifestError):
+                        approved_pipeline(review, code)
 
 
 if __name__ == "__main__":

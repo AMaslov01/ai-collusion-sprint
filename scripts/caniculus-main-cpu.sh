@@ -23,6 +23,7 @@ CAN_RUN=$(jq -r .run_id "$CAN_MANIFEST")
 [[ "$CAN_RUN" =~ ^[a-z0-9][a-z0-9-]{1,63}$ ]]
 CAN_ROOT=$(jq -r .artifacts.run_root "$CAN_MANIFEST")
 test "$CAN_ROOT" = "$CAN_PROJECT/runs/$CAN_RUN"
+case "$CAN_REVIEW" in "$CAN_ROOT"|"$CAN_ROOT/"*) exit 2;; esac
 CAN_CONFIG_PATH=$(jq -r .pipeline.config_path "$CAN_MANIFEST")
 [[ "$CAN_CONFIG_PATH" != /* && "/$CAN_CONFIG_PATH/" != */../* ]]
 CAN_CONFIG="$CAN_CODE/$CAN_CONFIG_PATH"
@@ -104,6 +105,12 @@ if [ "$CAN_MODE" = gpu ]; then
  CAN_NAME="a-maslov-ai-collusion-main-$CAN_RUN-$CAN_PHASE-${CAN_SHA:0:7}"
  CAN_MOUNT_SUFFIX=
  CAN_EXTRA+=(--gpus "device=$CAN_UUID" --mount "type=bind,src=$CAN_PREFLIGHT,dst=/preflight,readonly")
+ # Seal historical inputs also through their /cycle aliases, not only /preflight.
+ CAN_EXTRA+=(--mount "type=bind,src=$CAN_ROOT/cpu-prepare,dst=/cycle/cpu-prepare,readonly"
+             --mount "type=bind,src=$CAN_PREFLIGHT,dst=/cycle/cpu-$CAN_PHASE,readonly")
+ if [ "$CAN_PHASE" = continuations ]; then
+  CAN_EXTRA+=(--mount "type=bind,src=$CAN_ROOT/prefixes,dst=/cycle/prefixes,readonly")
+ fi
  CAN_COMMAND='exec python3 -m collusion_handoff.main_cycle > /work/supervisor.log 2>&1'
 else
  CAN_CPU_END=$(($(date +%s)+900))

@@ -28,6 +28,18 @@ def file_hash(path):
     return sha256(Path(path).read_bytes()).hexdigest()
 
 
+def registry_digest(groups):
+    """Normalize IDs before hashing, including across a JSON write/read roundtrip."""
+    normalized = {}
+    for number, group in groups.items():
+        require(type(number) in {int, str} and str(number).isdigit() and
+                str(int(number)) == str(number), "Registry IDs must be canonical nonnegative integers")
+        key = str(number)
+        require(key not in normalized, "Duplicate normalized registry ID")
+        normalized[key] = group
+    return fingerprint(normalized)
+
+
 def assigned_opportunities(manifest, groups):
     """The analysis population never changes the execution denominator."""
     sample = manifest["sample"]
@@ -133,7 +145,7 @@ def verify_annotations(review, manifest, groups, prefixes):
             receipt["message_verified_from_app"] is True and receipt["source_only_before_memory"] is True,
             "Human source-only mapping and formation review are required before memory")
     require(receipt["manifest_sha256"] == fingerprint(manifest) and
-            receipt["registry_sha256"] == fingerprint(groups), "Human annotation belongs to another main registry")
+            receipt["registry_sha256"] == registry_digest(groups), "Human annotation belongs to another main registry")
     require(all(HUMAN_ID.fullmatch(receipt[key]) for key in ("human_message_id", "human_thread_id")) and
             SHA.fullmatch(receipt["verification_evidence_sha256"]), "Actual human annotation evidence is required")
     require(set(receipt["groups"]) == {str(number) for number in groups}, "Incomplete main annotation matrix")
@@ -254,7 +266,12 @@ def preflight(manifest, config, base, assets, phase, *, code, review, root, work
         atomic_json(work / "assigned-future-opportunities.json", assigned_opportunities(manifest, groups))
     else:
         prepared = read_json(root / "cpu-prepare/private-task-registry.json")["groups"]
-        require(fingerprint(groups) == fingerprint(prepared), "Main registry changed after preparation")
+        prepare_receipt = read_json(root / "cpu-prepare/preflight.json")
+        require(prepare_receipt["manifest_sha256"] == fingerprint(manifest) and
+                prepare_receipt["phase"] == "prepare" and prepare_receipt["status"] == "passed_no_model_calls",
+                "Preparation belongs to another main manifest")
+        require(registry_digest(groups) == registry_digest(prepared) == prepare_receipt["registry_sha256"],
+                "Main registry changed after preparation")
         if phase == "prefixes":
             for number, group in groups.items():
                 protocol = Protocol(number, namespace(config["run_id"], number, "prefix"), catalog)
@@ -285,7 +302,7 @@ def preflight(manifest, config, base, assets, phase, *, code, review, root, work
             count = len(tokenizer.apply_chat_template(body["messages"], tokenize=True, add_generation_prompt=True, enable_thinking=False, return_dict=False))
             require(count + body["max_tokens"] <= config["limits"]["context"], "Main fixed wire exceeds full context")
     receipt = {"schema": "main_cpu_preflight_v1", "phase": phase, "status": "passed_no_model_calls",
-               "manifest_sha256": fingerprint(manifest), "registry_sha256": fingerprint(groups), "new_model_calls": 0,
+               "manifest_sha256": fingerprint(manifest), "registry_sha256": registry_digest(groups), "new_model_calls": 0,
                "code_commit": manifest["pipeline"]["code_commit"],
                "review_files_sha256": {name: file_hash(review / name) for name in
                                        ("main-manifest.json", "human-main-approval.json", "main-readiness.json")},
@@ -374,7 +391,7 @@ def main():
     pre = read_json(Path("/preflight/preflight.json"))
     require(pre["schema"] == "main_cpu_preflight_v1" and pre["phase"] == phase and
             pre["manifest_sha256"] == fingerprint(manifest), "Matching main CPU preflight required")
-    require(fingerprint(read_json(root / "cpu-prepare/private-task-registry.json")["groups"]) == pre["registry_sha256"],
+    require(registry_digest(read_json(root / "cpu-prepare/private-task-registry.json")["groups"]) == pre["registry_sha256"],
             "Prepared main registry differs from the CPU preflight")
     for name, digest in pre["review_files_sha256"].items():
         require(Path(name).name == name and file_hash(review / name) == digest, "Main approval packet changed after CPU review")
