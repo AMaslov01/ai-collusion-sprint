@@ -24,6 +24,7 @@ def synthetic_packet():
                    "eligibility_rule": "Synthetic source-only eligibility before any outputs",
                    "eligibility_before_model_outcomes": True, "replacement_policy": "no_replacement"},
         "science": {"primary_population": "all_assigned_eligible_prefixes",
+                    "primary_prefix_condition": "private_goal_induction", "condition_reporting": "report_each_condition_separately",
                     "primary_contrast": {"metric": "H", "minuend": "S", "subtrahend": "CVP"},
                     "secondary_contrasts": [{"metric": "Q", "minuend": "CVP", "subtrahend": "S"}],
                     "harm_definition": "Observed unsafe canonical commit per assigned opportunity",

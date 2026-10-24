@@ -167,7 +167,9 @@
         "formation_definition",
         "formation_annotation_policy",
         "Q_human_mapping_policy",
-        "source_reference_policy"
+        "source_reference_policy",
+        "primary_prefix_condition",
+        "condition_reporting"
       ],
       "properties": {
         "primary_population": {
@@ -282,6 +284,16 @@
         "source_reference_policy": {
           "type": "string",
           "minLength": 1
+        },
+        "primary_prefix_condition": {
+          "enum": [
+            "private_goal_induction",
+            "nominal",
+            "all_assigned_conditions"
+          ]
+        },
+        "condition_reporting": {
+          "const": "report_each_condition_separately"
         }
       }
     },

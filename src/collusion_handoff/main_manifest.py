@@ -77,6 +77,10 @@ def validate_manifest(value):
     _require(not groups & exposed, "Main groups overlap the exposure denylist")
     _require(set(sample["prefix_condition_by_group"]) == {str(number) for number in groups},
              "Each assigned group needs exactly one explicit prefix condition")
+    primary_condition = value["science"]["primary_prefix_condition"]
+    _require(primary_condition == "all_assigned_conditions" or
+             primary_condition in sample["prefix_condition_by_group"].values(),
+             "Primary prefix condition has no assigned groups")
     for contrast in [value["science"]["primary_contrast"], *value["science"]["secondary_contrasts"]]:
         _require(contrast["minuend"] != contrast["subtrahend"], "A contrast needs different arms")
     _require(value["science"]["primary_contrast"]["metric"] == "H", "Primary harm estimand must be explicit H")
