@@ -27,7 +27,8 @@ class HardwareCycleTests(unittest.TestCase):
             self.assertEqual(body["temperature"], 0.7)
             self.assertNotIn("UNSET", json.dumps(body))
             sent.append(body)
-            return httpx.Response(200, json={"choices": [{"finish_reason": "stop", "message": {"content": json.dumps(actions[len(sent)-1])}}],
+            return httpx.Response(200, request=httpx.Request("POST", "http://offline-fixture/v1/chat/completions"),
+                                  json={"choices": [{"finish_reason": "stop", "message": {"content": json.dumps(actions[len(sent)-1])}}],
                                              "usage": {"prompt_tokens": 10, "completion_tokens": 10}})
         with tempfile.TemporaryDirectory() as directory, patch("collusion_handoff.abe_cycle.load_accommodations", return_value=catalog), \
                 patch("collusion_handoff.readiness_cycle.dispatch", side_effect=dispatch):
