@@ -1,4 +1,4 @@
-"""Cache-only replay of a frozen v4 development-memory component phase.
+"""Cache-only replay of frozen v4 components or v5 checkpoint memory.
 
 Run in non-root CPU Docker with the completed run mounted read-only. This script
 constructs no HTTP client and never generates responses. Inference code is loaded
@@ -51,9 +51,18 @@ def main():
             raise AuditMismatch(message)
 
     output.mkdir(mode=0o700, parents=True)
-    config = read_json(code / "configs/readiness-cycle-v4.json")
-    base = read_json(code / config["base_runtime_config"])
     phase = read_json(completed / "phase-manifest.json")
+    profiles = {"development-memory-v1": "configs/readiness-cycle-v4.json",
+                "development-checkpoint-memory-v1": "configs/readiness-cycle-v5.json"}
+    require(phase["phase"] in profiles, "Unimplemented replay profile")
+    config_path = code / profiles[phase["phase"]]
+    config = read_json(config_path)
+    base = read_json(code / config["base_runtime_config"])
+    if phase["phase"] == "development-checkpoint-memory-v1":
+        from collusion_handoff.readiness_cycle import memory_implementation
+        message_builder, resolver, full_delivery = memory_implementation(config)
+    else:
+        message_builder, resolver, full_delivery = messages_v4, resolve_v4, full_delivery_v4
     assets = read_json(completed / "assets.json")
     phase_name = phase["phase"]
     cycle = args.cycle.resolve() if args.cycle else completed.parent
@@ -80,8 +89,8 @@ def main():
             errors.append({"check": name, "traceback": traceback.format_exc()})
 
     def identities():
-        require(phase["phase"] == "development-memory-v1", "Unsupported phase profile")
-        require(sha256((code / "configs/readiness-cycle-v4.json").read_bytes()).hexdigest() == phase["config_sha256"],
+        require(phase["phase"] in profiles, "Unsupported phase profile")
+        require(sha256(config_path.read_bytes()).hexdigest() == phase["config_sha256"],
                 "Inference config differs from phase fingerprint")
         actual_assets = {stage: {"prompt": (code / spec["prompt"]).read_text(),
                                 "schema": read_json(code / spec["schema"])}
@@ -170,6 +179,7 @@ def main():
         req, resp = read_rows(job / "io/requests.jsonl"), read_rows(job / "io/responses.jsonl")
         require(len(req) == len(resp), "Unresolved memory request")
         cursor, replayed = 0, {}
+        summary = None
 
         def cached(stage, messages):
             nonlocal cursor
@@ -184,10 +194,10 @@ def main():
 
         failure = None
         try:
-            build_packages(source, {"packing": {"archive_wrapper": config["memory"]["archive_wrapper"]}}, assets,
+            summary = build_packages(source, {"packing": {"archive_wrapper": config["memory"]["archive_wrapper"]}}, assets,
                            cached, lambda text: len(tokenizer.encode(text, add_special_tokens=False)),
-                           replayed.__setitem__, decode=decode_v4, resolve=resolve_v4,
-                           full_archive_content=full_delivery_v4, message_builder=messages_v4,
+                           replayed.__setitem__, decode=decode_v4, resolve=resolver,
+                           full_archive_content=full_delivery, message_builder=message_builder,
                            record_packer=record_packer(source["archive"]))
         except Exception as error:
             if isinstance(error, AuditMismatch):
@@ -196,6 +206,10 @@ def main():
         actual = read_json(job / "status.json")
         require((failure is None) == (actual["status"] == "built"), "Memory success/failure differs on replay")
         require(cursor == len(req), "Not every actual memory call replayed")
+        if failure is None:
+            require(actual["summary"] == summary, "Memory package summary differs")
+        else:
+            require(actual["failure_type"] == failure["type"], "Memory failure type differs")
         stored = {str(path.relative_to(job / "automatic-withheld"))
                   for path in (job / "automatic-withheld").rglob("*.json")}
         require(stored == set(replayed), "Replay artifact set differs")
@@ -245,6 +259,17 @@ def main():
     def jobs_audit():
         require((completed / "phase-status.json").exists(), "Component did not reach a complete receipt")
         terminal = read_json(completed / "phase-status.json")
+        if phase_name == "development-checkpoint-memory-v1":
+            planned = {"known-regression-group-1", "checkpoint-group-4", "checkpoint-group-5"}
+            require(set(terminal["jobs"]) == planned, "Missing assigned v5 memory job status")
+            for key in sorted(planned):
+                job = completed / "memory" / key
+                results[key] = replay_memory(job)
+                require(read_json(job / "status.json") == terminal["jobs"][key], "Phase/job status mismatch")
+            actual_phase_ids = {key for key in request_map if key.startswith(phase_name + "/")}
+            require(consumed == actual_phase_ids, "Unconsumed or unexpected checkpoint memory calls")
+            require(len(consumed) <= 12, "V5 checkpoint memory call ceiling exceeded")
+            return {"status": "passed", "jobs": len(results), "exact_phase_calls_consumed": len(consumed)}
         planned = {f"known-group-{number}" for number in (1, 2, 3)}
         definitions = read_json(code / "fixtures/memory-semantic-v3.json")["fixtures"]
         planned |= {definition["fixture_id"] for definition in definitions}
