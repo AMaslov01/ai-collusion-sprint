@@ -24,7 +24,7 @@
         "sha256": "d76de5758740be09069cb225b1174fab83037dcbae2f843653ba01e225921820"
       },
       "groups": 270,
-      "selection_confirmed": false
+      "selection_confirmed": true
     },
     "flight_csv_sha256": "8dafdb0e3f8b79ce599a1e612a772865295bc226b46e5fb278368f7255b11cee",
     "tool_input_manifest": {
@@ -36,7 +36,7 @@
   "model": {
     "repo": "Qwen/Qwen3.8-27B-FP8",
     "revision": "017b9c7af6b5689d5dd426a76e0bc077eb5ca20a",
-    "served_alias": "UNSET",
+    "served_alias": "qwen-native-dev",
     "weight_hashes": {
       "path": "/mnt/ssd/a.maslov/ai-collusion-sprint/bootstrap/preparation-31f9c028bd8615c4b7648144c278ed0d6ffbe56c/model-identity.json",
       "sha256": "061fe5123d3c186860f3ced51e8623ba2959950c9b728c48318adc8827c12a92"
@@ -48,11 +48,11 @@
     "image_id": "sha256:bd8a5d7a8774800c92d714c0c226b32c1863f929150f36efd610aebcd12a335d",
     "vllm_version": "0.32.0",
     "driver": "580.178.04",
-    "tensor_parallel_size": "UNSET",
-    "kv_dtype": "UNSET",
+    "tensor_parallel_size": 1,
+    "kv_dtype": "auto",
     "weight_quantization": "fp8",
-    "tool_parser": "UNSET",
-    "reasoning_parser": "UNSET",
+    "tool_parser": "qwen3_coder",
+    "reasoning_parser": "qwen3",
     "travel_tool_dependencies": {
       "status": "confirmed",
       "isolation": "external_directory_mounted_read_only_for_execution",
@@ -74,15 +74,15 @@
     }
   },
   "generation": {
-    "tokenizer_revision": "UNSET",
-    "chat_template_hash": "UNSET",
+    "tokenizer_revision": "017b9c7af6b5689d5dd426a76e0bc077eb5ca20a",
+    "chat_template_hash": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
     "temperature": 0.7,
     "top_p": 0.8,
     "top_k": 20,
     "min_p": 0.0,
     "presence_penalty": 1.5,
     "repetition_penalty": 1.0,
-    "seed": "UNSET",
+    "seed": 42,
     "chat_template_kwargs": {
       "enable_thinking": false
     },
@@ -91,12 +91,15 @@
     "tool_protocol": "UNSET"
   },
   "limits": {
-    "context": "UNSET",
-    "max_output": "UNSET",
-    "concurrency": "UNSET",
-    "max_steps": "UNSET",
-    "total_task_tokens": "UNSET",
-    "task_wall_time_seconds": "UNSET"
+    "context": 32768,
+    "max_input_tokens": 28672,
+    "max_output": 4096,
+    "concurrency": 1,
+    "n": 1,
+    "max_steps": 30,
+    "max_model_calls_per_traveler": 30,
+    "total_task_tokens": 200000,
+    "task_wall_time_seconds": 1800
   },
   "smoke": {
     "status": "passed_cache_only_audit_verified",
@@ -191,12 +194,82 @@
     "native_dev": {
       "status": "not_started",
       "selection": {
-        "group_ids": "UNSET",
-        "traveler_ids": "UNSET",
-        "max_new_travelers": "UNSET",
-        "checkpoint_after": "UNSET",
-        "job_ids": "UNSET",
-        "expected_counts": "UNSET"
+        "group_ids": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "traveler_ids": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "max_new_travelers": 4,
+        "checkpoint_after": 2,
+        "job_ids": [
+          "native/group-1/traveler-1",
+          "native/group-1/traveler-2",
+          "native/group-1/traveler-3",
+          "native/group-1/traveler-4",
+          "native/group-2/traveler-1",
+          "native/group-2/traveler-2",
+          "native/group-2/traveler-3",
+          "native/group-2/traveler-4",
+          "native/group-3/traveler-1",
+          "native/group-3/traveler-2",
+          "native/group-3/traveler-3",
+          "native/group-3/traveler-4",
+          "native/group-4/traveler-1",
+          "native/group-4/traveler-2",
+          "native/group-4/traveler-3",
+          "native/group-4/traveler-4",
+          "native/group-5/traveler-1",
+          "native/group-5/traveler-2",
+          "native/group-5/traveler-3",
+          "native/group-5/traveler-4",
+          "native/group-6/traveler-1",
+          "native/group-6/traveler-2",
+          "native/group-6/traveler-3",
+          "native/group-6/traveler-4",
+          "native/group-7/traveler-1",
+          "native/group-7/traveler-2",
+          "native/group-7/traveler-3",
+          "native/group-7/traveler-4",
+          "native/group-8/traveler-1",
+          "native/group-8/traveler-2",
+          "native/group-8/traveler-3",
+          "native/group-8/traveler-4",
+          "native/group-9/traveler-1",
+          "native/group-9/traveler-2",
+          "native/group-9/traveler-3",
+          "native/group-9/traveler-4",
+          "native/group-10/traveler-1",
+          "native/group-10/traveler-2",
+          "native/group-10/traveler-3",
+          "native/group-10/traveler-4",
+          "native/group-11/traveler-1",
+          "native/group-11/traveler-2",
+          "native/group-11/traveler-3",
+          "native/group-11/traveler-4",
+          "native/group-12/traveler-1",
+          "native/group-12/traveler-2",
+          "native/group-12/traveler-3",
+          "native/group-12/traveler-4"
+        ],
+        "expected_counts": {
+          "groups": 12,
+          "new_traveler_jobs": 48
+        }
       },
       "progression": [
         "one_group",
@@ -205,9 +278,15 @@
         "readiness_check",
         "remaining_approved_groups"
       ],
-      "per_role_budgets": "UNSET",
-      "wall_time_seconds": "UNSET",
-      "max_model_calls": "UNSET",
+      "per_role_budgets": {
+        "A": {
+          "max_calls_per_traveler": 30,
+          "total_input_plus_output_tokens_per_traveler": 200000,
+          "wall_time_seconds_per_traveler": 1800
+        }
+      },
+      "wall_time_seconds": 21600,
+      "max_model_calls": 1440,
       "outputs": [
         "io",
         "events",
@@ -290,15 +369,15 @@
     ],
     "wall_time_seconds": 43200,
     "deadline": "2026-10-24T11:13:16Z",
-    "per_call_timeout_seconds": "UNSET",
-    "max_attempts": "UNSET",
-    "retry_backoff_seconds": "UNSET",
+    "per_call_timeout_seconds": 900,
+    "max_attempts": 1,
+    "retry_backoff_seconds": 0,
     "ambiguous_env_step": "stop_without_retry_unless_idempotency_is_proven",
     "cpus": 8,
     "ram_gib": 64,
     "disk_budget_gib": 150,
-    "pids_limit": "UNSET",
-    "shm_gib": "UNSET",
+    "pids_limit": 1024,
+    "shm_gib": 8,
     "gpu_uuid": "GPU-441e6008-cd27-34b5-c81a-17dad9d4a894",
     "gpu_reservation": {
       "host_index": 1,
@@ -338,7 +417,7 @@
     {
       "id": "D04",
       "question": "Native DEV volume and actual upstream group/traveler IDs",
-      "status": "PROPOSED",
+      "status": "CONFIRMED",
       "proposed_value": {
         "group_ids": [
           1,
@@ -359,8 +438,27 @@
         "minimum_available_new_requests": 5,
         "selection_status": "PROPOSED_NOT_EFFECTIVE"
       },
-      "effective_value": "UNSET",
-      "evidence": "AGENT_HANDOFF.md D04; actual IDs require server-side inspection and user confirmation"
+      "effective_value": {
+        "group_ids": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "max_new_travelers": 4,
+        "checkpoint_after": 2,
+        "minimum_available_new_requests": 5,
+        "selection_status": "PROPOSED_NOT_EFFECTIVE"
+      },
+      "evidence": "User explicitly confirmed all three questions in this chat on 2026-10-24: 12x4 selection/snapshot2, proposed native runtime and finite budgets, and pinned JSONL through a thin adapter. No memory-builder or two-agent parameter approval implied."
     },
     {
       "id": "D06",
@@ -516,7 +614,7 @@
     {
       "id": "NATIVE_DEV_RUNTIME_BUDGET",
       "question": "Apply smoke configuration to native DEV and confirm its additional finite budgets",
-      "status": "PROPOSED",
+      "status": "CONFIRMED",
       "proposed_value": {
         "runtime_from": "/smoke",
         "actor_sampler_from": "/generation",
@@ -529,20 +627,35 @@
         "attempts_per_call": 1,
         "package_deadline": "2026-10-24T11:13:16Z"
       },
-      "effective_value": "UNSET",
-      "evidence": "Prepared for user review after successful smoke; no native model calls until confirmation."
+      "effective_value": {
+        "runtime_from": "/smoke",
+        "actor_sampler_from": "/generation",
+        "seed": 42,
+        "max_steps_per_traveler": 30,
+        "max_model_attempts_per_traveler": 30,
+        "total_input_plus_output_tokens_per_traveler": 200000,
+        "traveler_wall_time_seconds": 1800,
+        "native_block_wall_time_seconds": 21600,
+        "attempts_per_call": 1,
+        "package_deadline": "2026-10-24T11:13:16Z"
+      },
+      "evidence": "User explicitly confirmed all three questions in this chat on 2026-10-24: 12x4 selection/snapshot2, proposed native runtime and finite budgets, and pinned JSONL through a thin adapter. No memory-builder or two-agent parameter approval implied."
     },
     {
       "id": "NATIVE_PINNED_DATA_READER",
       "question": "Native upstream data_loader imports datasets, which is absent from the pinned image",
-      "status": "PROPOSED",
+      "status": "CONFIRMED",
       "proposed_value": {
         "reader": "Read the already verified pinned JSONL in the thin adapter, preserving upstream _convert_row semantics and testing exact parity offline",
         "upstream_patch": "none",
         "new_packages": "none"
       },
-      "effective_value": "UNSET",
-      "evidence": "Package metadata in the cache-only smoke audit reports datasets and pyarrow absent. No additional installation or effective loader change authorized by this proposal."
+      "effective_value": {
+        "reader": "Read the already verified pinned JSONL in the thin adapter, preserving upstream _convert_row semantics and testing exact parity offline",
+        "upstream_patch": "none",
+        "new_packages": "none"
+      },
+      "evidence": "User explicitly confirmed all three questions in this chat on 2026-10-24: 12x4 selection/snapshot2, proposed native runtime and finite budgets, and pinned JSONL through a thin adapter. No memory-builder or two-agent parameter approval implied."
     }
   ]
 }

@@ -2,9 +2,9 @@
 # One bounded technical smoke; this script never starts either DEV block.
 set -euo pipefail
 CAN_CODE_SHA=${1:?Pass the full committed adapter SHA}
-CAN_STAGE=${2:?Choose validate, run or audit}
+CAN_STAGE=${2:?Choose validate, run, audit or native-checks}
 [[ "$CAN_CODE_SHA" =~ ^[0-9a-f]{40}$ ]]
-case "$CAN_STAGE" in validate|run|audit) ;; *) exit 2 ;; esac
+case "$CAN_STAGE" in validate|run|audit|native-checks) ;; *) exit 2 ;; esac
 test "$(hostname)" = caniculus.appliedai.local
 test "$(id -un)" = a.maslov
 test "$(id -u)" -ne 0
@@ -35,6 +35,13 @@ test "$CAN_REMAINING" -gt 0
 CAN_DEVICE=(--env NVIDIA_VISIBLE_DEVICES=void --env CUDA_VISIBLE_DEVICES=)
 CAN_ACTION=(--validate-only)
 CAN_EXTRA_MOUNTS=()
+if [ "$CAN_STAGE" = native-checks ]; then
+  CAN_TASKS=$(dirname "$(jq -r '.data.file_hashes.registry.path' "$CAN_CONFIG")")
+  test "$(realpath "$CAN_TASKS")" = "$CAN_TASKS"
+  test "$(stat -c %u "$CAN_TASKS")" = "$(id -u)"
+  CAN_EXTRA_MOUNTS=(--mount "type=bind,src=$CAN_TASKS,dst=/tasks,readonly")
+  CAN_ACTION=(--native-checks)
+fi
 if [ "$CAN_STAGE" = audit ]; then
   CAN_SMOKE_SHA=${3:?Pass the completed smoke source SHA}
   [[ "$CAN_SMOKE_SHA" =~ ^[0-9a-f]{40}$ ]]
@@ -82,6 +89,6 @@ docker run -d --name "$CAN_NAME" --label owner=a.maslov --label "adapter_commit=
   "${CAN_EXTRA_MOUNTS[@]}" \
   --entrypoint /usr/bin/timeout "$(cat "$CAN_PROJECT/bootstrap/environment/image-id.txt")" \
   --signal=TERM --kill-after=30s "${CAN_REMAINING}s" /bin/bash -c \
-  'set -e; umask 077; test ! -e /control/STOP; if [ "${1-}" = --audit ]; then exec python3 /code/scripts/audit-smoke.py > /work/audit.log 2>&1; fi; if [ "$#" -gt 0 ]; then python3 -m unittest discover -s /code/tests -v > /work/unittest.log 2>&1; fi; exec python3 -m collusion_handoff.smoke "$@" > /work/supervisor.log 2>&1' \
+  'set -e; umask 077; test ! -e /control/STOP; if [ "${1-}" = --audit ]; then exec python3 /code/scripts/audit-smoke.py > /work/audit.log 2>&1; fi; if [ "$#" -gt 0 ]; then python3 -m unittest discover -s /code/tests -v > /work/unittest.log 2>&1; fi; if [ "${1-}" = --native-checks ]; then exec python3 /code/scripts/check-native-import.py > /work/native-import.log 2>&1; fi; exec python3 -m collusion_handoff.smoke "$@" > /work/supervisor.log 2>&1' \
   -- "${CAN_ACTION[@]}"
 docker inspect "$CAN_NAME" > "$CAN_WORK/docker-inspect.json"
