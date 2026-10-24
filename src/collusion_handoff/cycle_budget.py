@@ -25,6 +25,10 @@ class BudgetExceeded(MemoryError):
     pass
 
 
+class AccountingFailure(MemoryError):
+    pass
+
+
 class CycleBudget:
     def __init__(self, root, contract, http, *, phase_work, clock=time.time):
         self.root, self.contract, self.http = Path(root), contract, http
@@ -70,6 +74,8 @@ class CycleBudget:
         admission(self.deadline())
         require(self.clock() < self.deadline(), "New v3 block deadline reached")
         state = self.state()
+        if state["unknown_spend_requests"]:
+            raise AccountingFailure("Unresolved or unknown spend blocks new requests; reserved budget is preserved")
         if logical_id is not None:
             require(logical_id not in state["logical_ids"], "Logical request already spent; no hidden retry")
             require(state["attempts"] < self.contract["limits"]["max_new_model_attempts"], "Global attempt ceiling reached")
@@ -140,7 +146,8 @@ class CycleBudget:
             append_event(Path(job) / "io/responses.jsonl", receipt)
         atomic_json(self.root / "global-budget.json", self.state())
         response.raise_for_status()
-        require(receipt["accounted_actual_tokens"] is not None, "Usage mismatch; spend reserved conservatively")
+        if receipt["accounted_actual_tokens"] is None:
+            raise AccountingFailure("Usage mismatch; spend reserved conservatively; stop phase")
         atomic_json(self.phase_work / "current-job.json", {"logical_call_id": logical_id, "deadline_unix": end})
         return response
 

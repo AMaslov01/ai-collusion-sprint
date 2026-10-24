@@ -12,7 +12,7 @@ import httpx
 from jsonschema import ValidationError
 
 from collusion_handoff.artifacts import atomic_json, read_json
-from collusion_handoff.cycle_budget import CycleBudget
+from collusion_handoff.cycle_budget import AccountingFailure, CycleBudget
 from collusion_handoff.memory import MemoryError, validate
 from collusion_handoff.memory_v3 import (derive_verification, fixture_source, resolve_v3, evidence_lines,
                                          evidence_view, resolve_v31, fixture_mapping, fixture_eligible, messages_v31)
@@ -188,6 +188,25 @@ class GlobalBudgetTests(unittest.TestCase):
             for identity in ("first", "second"):
                 with self.assertRaises(MemoryError):
                     two.dispatch(self.payload(), identity, "test")
+        self.assertEqual(len(dispatched), 1)
+
+    def test_HTTP200_usage_mismatch_preserves_reserved_spend_and_blocks_next_call(self):
+        dispatched = []
+        def handler(request):
+            if request.url.path == "/tokenize":
+                return httpx.Response(200, json={"count": 10, "max_model_len": 32768})
+            dispatched.append(request)
+            return httpx.Response(200, json={"usage": {"prompt_tokens": 999, "completion_tokens": 5}})
+        with tempfile.TemporaryDirectory() as temp, httpx.Client(transport=httpx.MockTransport(handler)) as http:
+            config = self.config()
+            config["allocations"]["test"] = 2
+            one = CycleBudget(temp, config, http, phase_work=temp)
+            with self.assertRaises(AccountingFailure):
+                one.dispatch(self.payload(), "first", "test")
+            self.assertEqual(one.state()["accounted_input_output_tokens"], 110)
+            self.assertEqual(one.state()["unknown_spend_requests"], ["first"])
+            with self.assertRaises(AccountingFailure):
+                CycleBudget(temp, config, http, phase_work=temp).dispatch(self.payload(), "second", "test")
         self.assertEqual(len(dispatched), 1)
 
     def test_unknown_spend_reserves_full_budget_and_never_retries(self):

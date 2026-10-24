@@ -15,7 +15,7 @@ from transformers import AutoTokenizer
 from . import smoke
 from .abe_runner import ServiceFailure
 from .artifacts import atomic_json, canonical, fingerprint, read_json
-from .cycle_budget import CycleBudget
+from .cycle_budget import AccountingFailure, CycleBudget
 from .memory import apply_verdicts, build_packages, require
 from .memory_v3 import fixture_source, fixture_eligible, fixture_mapping
 from .memory_v4 import constrained_payload, decode_v4, full_delivery_v4, messages_v4, record_packer, resolve_v4
@@ -130,6 +130,8 @@ def dispatch(budget, body, logical_id, allocation, job):
         raise ServiceFailure(str(error), kind="timeout") from error
     except httpx.HTTPError as error:
         raise ServiceFailure(str(error)) from error
+    except AccountingFailure as error:
+        raise ServiceFailure(str(error), kind="accounting_failure") from error
 
 
 def memory_job(source, job, identity, config, assets, budget, count_tokens):
