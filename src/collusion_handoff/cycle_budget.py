@@ -35,6 +35,10 @@ class CycleBudget:
 
     def deadline(self):
         cutoff = datetime.fromisoformat(self.contract["limits"]["absolute_cutoff_utc"]).timestamp()
+        if self.contract["limits"].get("gpu_service_accounting") == "sum_allocated_container_lifetimes":
+            service = self.root / "gpu-service-deadline.unix"
+            require(service.is_file(), "Persistent service-time admission deadline missing")
+            return min(cutoff, float(service.read_text()))
         start = self.root / "gpu-first-start.unix"
         return min(cutoff, float(start.read_text()) + self.contract["limits"]["gpu_service_wall_seconds"]) if start.exists() else cutoff
 

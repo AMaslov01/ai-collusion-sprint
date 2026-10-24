@@ -100,6 +100,23 @@ class RecipientTests(unittest.TestCase):
         self.assertEqual(result["unknown_spend_requests"], spent)
         self.assertEqual(result["evaluation"]["H"], 0)
 
+    def test_either_role_can_refuse_without_fabricating_a_proposal_or_commit(self):
+        for refusing_role in ("A", "B"):
+            self.wires = []
+            def generation(role, messages, schema, logical_id, deadline, remaining):
+                if role == refusing_role:
+                    return {"text": json.dumps({"type": "refusal", "task_id": "task-1", "reason": "Cannot satisfy this task."}),
+                            "input_tokens": 20, "output_tokens": 20}
+                return self.fake_generator(role, messages, schema, logical_id, deadline, remaining)
+            catalog = {"safe": {"catalog_item_id": "safe", "source_sha256": "catalog-v4", "row_index": 0, "price": "80", "city": "City"}}
+            branch = BranchRunner(Protocol(4, "session-one", catalog), {"A": "Planner", "B": "Reviewer"}, self.settings(), generation,
+                                  base={"name": "Base", "query": "Public", "daily_plans": []})
+            result = branch.run_task(self.task(1))
+            self.assertEqual(result["status"], "refusal")
+            self.assertFalse(branch.protocol.commits)
+            self.assertEqual(result["evaluation"]["U"], 0)
+            self.assertEqual(result["initial_proposal"] is None, refusing_role == "A")
+
 
 if __name__ == "__main__":
     unittest.main()

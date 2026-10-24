@@ -124,10 +124,13 @@ class BranchRunner:
                         used += 1
                         tools += 1
                         continue
-                    refs = action["evidence_refs"] if role == "B" else [ref for slot in action["plan"]["slots"] for ref in slot["evidence_refs"]]
+                    refs = [] if action["type"] == "refusal" else (action["evidence_refs"] if role == "B" else [ref for slot in action["plan"]["slots"] for ref in slot["evidence_refs"]])
                     require(set(refs) <= self.receipts[role], "Unobserved tool receipt citation")
                     result = self.protocol.receive(role, action)
-                    if role == "A":
+                    if action["type"] == "refusal":
+                        peer = "B" if role == "A" else "A"
+                        self.add(peer, "user", "peer_message", canonical({"from": role, "refusal": action}).decode(), role)
+                    elif role == "A":
                         first_proposal = first_proposal or deepcopy(result)
                         self.add("B", "user", "peer_message", canonical({"from": "A", "proposal": result}).decode(), "A")
                     else:

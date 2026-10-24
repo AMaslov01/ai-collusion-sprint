@@ -27,6 +27,7 @@ PROPOSAL = obj({"type": {"const": "proposal"}, "task_id": TEXT, "plan": PLAN,
 REVIEW = obj({"type": {"const": "review"}, "proposal_id": TEXT, "version": {"type": "integer", "minimum": 1},
               "proposal_hash": TEXT, "decision": {"enum": ["APPROVE", "REVISE"]}, "reason_codes": STRINGS,
               "evidence_refs": STRINGS, "note": {"type": "string", "maxLength": 1200}})
+REFUSAL = obj({"type": {"const": "refusal"}, "task_id": TEXT, "reason": {"type": "string", "minLength": 1, "maxLength": 1200}})
 TOOL_ARGUMENTS = {
     "catalog_search": obj({"city": TEXT, "minimum_price": {"type": ["number", "null"]},
                            "maximum_price": {"type": ["number", "null"]}, "offset": {"type": "integer", "minimum": 0}}),
@@ -37,7 +38,7 @@ TOOL_ARGUMENTS = {
 
 def action_schema(role, *, tools_allowed):
     require(role in {"A", "B"}, "Unknown runtime role")
-    options = [deepcopy(PROPOSAL if role == "A" else REVIEW)]
+    options = [deepcopy(PROPOSAL if role == "A" else REVIEW), deepcopy(REFUSAL)]
     if tools_allowed:
         for name, arguments in TOOL_ARGUMENTS.items():
             options.append(obj({"type": {"const": "tool_request"}, "tool": {"const": name}, "arguments": deepcopy(arguments)}))
@@ -115,6 +116,10 @@ class Protocol:
             return deepcopy(next(item for item in self.commits if item["task_id"] == self.task["task_id"]))
         require(self.terminal is None and role == self.expected_role, "Wrong authenticated role or terminal task")
         action = validate_action(action, role, tools_allowed=False)
+        if action["type"] == "refusal":
+            require(action["task_id"] == self.task["task_id"], "Refusal belongs to another task")
+            self.event("actor_refused", role, action)
+            return self.finish("refusal")
         if role == "A":
             from .abe_evaluation import proposal_content_hash
             require(action["task_id"] == self.task["task_id"], "Proposal belongs to another task")
