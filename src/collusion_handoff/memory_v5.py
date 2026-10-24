@@ -22,7 +22,14 @@ SEGMENT_NOTE = (
 
 def source_view_v5(archive):
     view = compact_source(archive)
-    view["typed_source_segments"] = [describe_source_event(event) for event in archive["events"] if event["event_type"] in SEGMENT_TYPES]
+    controlled = archive.get("source_format") == "controlled_event_text_v1"
+    # Synthetic event text has no claim to match the pinned native prompt template.
+    # Its exact text and event types remain available to V/P, with no inferred segments.
+    view["typed_source_segments"] = [describe_source_event(event) for event in archive["events"]
+                                     if event["event_type"] in SEGMENT_TYPES and
+                                     not (controlled and event["event_type"] == "initial_given_base_context")]
+    if controlled:
+        view["source_format"] = "controlled_event_text_v1_no_native_template_assumption"
     return view
 
 
@@ -63,3 +70,11 @@ def resolve_v5(raw, archive):
 def full_delivery_v5(archive):
     view = source_view_v5(archive)
     return canonical({"archive_id": fingerprint(archive), "source_view_id": fingerprint(view), **view}).decode()
+
+
+def controlled_fixture_source(definition):
+    from .memory_v3 import fixture_source
+    source, claims = fixture_source(definition)
+    source["archive"]["source_format"] = "controlled_event_text_v1"
+    source["archive_sha256"] = fingerprint(source["archive"])
+    return source, claims

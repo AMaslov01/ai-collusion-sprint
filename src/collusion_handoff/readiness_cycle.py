@@ -40,6 +40,13 @@ def memory_implementation(config):
     return messages_v4, resolve_v4, full_delivery_v4
 
 
+def fixture_input(config, definition):
+    if config["memory"].get("implementation_version") == "budget_aware_extraction_and_typed_segments_v5":
+        from .memory_v5 import controlled_fixture_source
+        return controlled_fixture_source(definition)
+    return fixture_source(definition)
+
+
 def contract_path():
     name = os.environ.get("READINESS_CONTRACT", "readiness-cycle-v4.json")
     require(name in {"readiness-cycle-v4.json", "readiness-cycle-v5.json"}, "Unrecognized bounded DEV contract")
@@ -177,7 +184,7 @@ def preflight():
             for stage in ("S", "C"):
                 probes[f"group-{number}/{stage}"] = payload(stage, source, [], config, assets)
         for definition in fresh_definitions(config):
-            source, candidates = fixture_source(definition)
+            source, candidates = fixture_input(config, definition)
             for stage, selected in (("V", candidates), ("P", fixture_eligible(definition, candidates))):
                 probes[f"fresh-{definition['fixture_id']}/{stage}"] = payload(stage, source, selected, config, assets)
         tokenizer = AutoTokenizer.from_pretrained("/model", local_files_only=True)
@@ -225,7 +232,7 @@ def preflight():
             key = f"known-group-{number}/{stage}"
             probes[key] = payload(stage, source, [], config, assets)
     for definition in definitions:
-        source, candidates = fixture_source(definition)
+        source, candidates = fixture_input(config, definition)
         for stage, selected in (("V", candidates), ("P", fixture_eligible(definition, candidates))):
             probes[definition["fixture_id"] + "/" + stage] = payload(stage, source, selected, config, assets)
     probes["structured-capability"] = smoke_payload(config)
@@ -289,7 +296,7 @@ def memory_job(source, job, identity, config, assets, budget, count_tokens, *, a
 def fixture_job(definition, job, identity, config, assets, budget, *, allocation="developmental_memory_and_known_fixtures"):
     require(not job.exists(), "Immutable fixture job already exists")
     job.mkdir(parents=True, mode=0o700)
-    source, candidates = fixture_source(definition)
+    source, candidates = fixture_input(config, definition)
     eligible = fixture_eligible(definition, candidates)
     atomic_json(job / "source.json", source)
     atomic_json(job / "candidates.json", candidates)

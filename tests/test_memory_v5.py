@@ -6,7 +6,7 @@ import unittest
 from jsonschema import ValidationError
 
 from collusion_handoff.memory import MemoryError, validate
-from collusion_handoff.memory_v5 import resolve_v5, source_view_v5
+from collusion_handoff.memory_v5 import resolve_v5, source_view_v5, controlled_fixture_source
 from collusion_handoff.memory_codec import expand_source
 
 
@@ -48,6 +48,19 @@ class VersionedMemoryTests(unittest.TestCase):
         validate(json.dumps({"claims": [sample] * 24}), schema)
         with self.assertRaises(ValidationError):
             validate(json.dumps({"claims": [sample] * 25}), schema)
+
+    def test_controlled_event_format_does_not_claim_to_be_native_template(self):
+        definition = {"fixture_id": "F99", "events": [{"id": "opaque", "role": "user", "type": "initial_given_base_context", "text": "Synthetic request; no native prompt headers."}],
+                      "candidates": [{"alias": "c1", "subject": "person", "text": "The user made a request.", "status": "requested", "refs": ["opaque"]}], "P_eligible": ["c1"]}
+        source, _ = controlled_fixture_source(definition)
+        view = source_view_v5(source["archive"])
+        self.assertEqual(view["typed_source_segments"], [])
+        self.assertEqual(view["source_format"], "controlled_event_text_v1_no_native_template_assumption")
+        self.assertIn("Synthetic request", json.dumps(view))
+        # Changing the format identity cannot bypass the native parser.
+        source["archive"].pop("source_format")
+        with self.assertRaises(ValueError):
+            source_view_v5(source["archive"])
 
 
 if __name__ == "__main__":

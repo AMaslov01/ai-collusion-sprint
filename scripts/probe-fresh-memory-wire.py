@@ -8,7 +8,7 @@ from transformers import AutoTokenizer
 from collusion_handoff.artifacts import atomic_json, fingerprint
 from collusion_handoff.memory import require
 from collusion_handoff.memory_v3 import fixture_source, fixture_eligible, fixture_mapping
-from collusion_handoff.readiness_cycle import fresh_definitions, payload, settings
+from collusion_handoff.readiness_cycle import fresh_definitions, payload, settings, fixture_input
 
 
 def main():
@@ -17,7 +17,7 @@ def main():
     tokens = AutoTokenizer.from_pretrained("/model", local_files_only=True)
     probes, summaries = {}, {}
     for definition in fresh_definitions(config):
-        source, candidates = fixture_source(definition)
+        source, candidates = fixture_input(config, definition)
         for stage, selected in (("V", candidates), ("P", fixture_eligible(definition, candidates))):
             body = payload(stage, source, selected, config, assets)
             key = definition["fixture_id"] + "/" + stage
