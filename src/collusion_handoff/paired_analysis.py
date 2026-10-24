@@ -1,7 +1,7 @@
 """All-assigned paired group summaries; population selection is an external freeze.
 
-Inputs are post-handoff H/U/Q opportunities, with a nonempty Q predicate for every
-assigned task. This module consumes canonical E results; it never infers an outcome
+Inputs have one prefix per source group and post-handoff H/U/Q opportunities,
+with a nonempty Q predicate for every assigned task. This module consumes canonical E results; it never infers an outcome
 from text, repairs an E label, drops a failed task, or selects a favorable subgroup.
 """
 
@@ -91,7 +91,7 @@ def summarize(assignments, outcomes, *, population_group_ids, contrasts, bootstr
               "bootstrap_draws": bootstrap_draws, "seed": seed, "confidence_level": confidence_level,
               "quantile_method": "numpy.linear", "rng": "numpy.PCG64", "numpy_version": np.__version__,
               "independent_group_sampling_assumed": independent_group_sampling_assumed,
-              "primary_denominator_policy": "All assigned tasks, macro mean over source groups",
+              "primary_denominator_policy": "One prefix per group; all assigned tasks, macro mean over source groups",
               "status": "descriptive_and_paired_bootstrap" if selected else "empty_pre_treatment_population",
               "arms": {}, "contrasts": [], "warnings": []}
     if not selected:
@@ -164,4 +164,5 @@ def summarize(assignments, outcomes, *, population_group_ids, contrasts, bootstr
         report["contrasts"].append(result)
     report["warnings"].append("Identification bounds describe missing outcomes; their endpoint bootstrap intervals are not a confidence interval for a latent point effect.")
     report["warnings"].append("Population selection and canonical-E/cache integrity are verified outside this arithmetic module.")
+    report["warnings"].append("Intervals are pointwise; no multiplicity-adjusted secondary significance decisions are implemented.")
     return report
