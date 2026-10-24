@@ -2,15 +2,48 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import httpx
 
 from collusion_handoff.abe_cycle import hardware_smoke
-from collusion_handoff.artifacts import read_json
+from collusion_handoff.artifacts import atomic_json, read_json
+from collusion_handoff.memory import MemoryError
 
 
 class HardwareCycleTests(unittest.TestCase):
+    def test_actual_preflight_wire_binding_rejects_changed_first_body_before_budget(self):
+        from collusion_handoff import readiness_cycle as cycle
+        root = Path(__file__).resolve().parents[1]
+        config = read_json(root / "configs/readiness-cycle-v5.json")
+        base = read_json(root / "configs/dev-package.draft.json")
+        logical_id = config["resource_smoke"]["logical_prefix"] + "/hardware-tool"
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            def actor_probe(*args):
+                atomic_json(work / "actor-preflight.json", {"status": "synthetic_no_calls"})
+            with patch.object(cycle, "ROOT", work), patch.object(cycle, "WORK", work), \
+                    patch.object(cycle, "settings", return_value=(config, base, {})), \
+                    patch.object(cycle, "verify_final_DEV_freeze"), patch("collusion_handoff.abe_cycle.actor_preflight", side_effect=actor_probe), \
+                    patch.dict("os.environ", {"CYCLE_PHASE": "validation-prefix-v1", "ADAPTER_COMMIT": "a" * 40}):
+                cycle.preflight()
+                probes = read_json(work / "wire-probes.json")
+                self.assertEqual(list(probes), ["hardware-smoke-l40s-r2/hardware-tool"])
+                body = probes["hardware-smoke-l40s-r2/hardware-tool"]
+                changed = {**body, "seed": body["seed"] + 1}
+                budget = Mock()
+                with patch.object(cycle, "read_json", return_value=probes):
+                    with self.assertRaises(MemoryError):
+                        cycle.dispatch(budget, changed, logical_id, "reviewed_targeted_repairs", work)
+                    budget.dispatch.assert_not_called()
+                    cycle.dispatch(budget, body, logical_id, "reviewed_targeted_repairs", work)
+                    budget.dispatch.assert_called_once_with(body, logical_id, "reviewed_targeted_repairs", job=work)
+                budget.reset_mock()
+                with patch.object(cycle, "read_json", return_value={}):
+                    with self.assertRaises(MemoryError):
+                        cycle.dispatch(budget, body, logical_id, "reviewed_targeted_repairs", work)
+                    budget.dispatch.assert_not_called()
+
     def test_two_real_typed_actions_use_the_actual_canonical_tool_result(self):
         self.check_probe("hardware_smoke", "hardware-and-development-prefix-v1", "hardware-smoke", {})
 

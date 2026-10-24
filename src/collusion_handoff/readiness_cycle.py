@@ -163,6 +163,10 @@ def master_manifest(config, base):
             "runtime": base["runtime"], "paid_api_budget_usd": 0}
 
 
+def fixed_probe_key(logical_id, phase):
+    return logical_id.removeprefix(phase + "/")
+
+
 def preflight():
     config, base, assets = settings()
     if (ROOT / "master-manifest.json").exists():
@@ -182,7 +186,8 @@ def preflight():
         from .abe_cycle import actor_preflight, hardware_smoke_request
         actor_preflight(config, base, assets, WORK, [6, 7])
         if config.get("resource_smoke"):
-            atomic_json(WORK / "wire-probes.json", {"resource-hardware-tool": hardware_smoke_request(config, base)})
+            logical_id = config["resource_smoke"]["logical_prefix"] + "/hardware-tool"
+            atomic_json(WORK / "wire-probes.json", {fixed_probe_key(logical_id, identity["phase"]): hardware_smoke_request(config, base)})
         atomic_json(WORK / "phase-manifest.json", identity)
         atomic_json(WORK / "preflight.json", {"status": "passed_no_model_calls", "identity": identity,
                     "actor_preflight": read_json(WORK / "actor-preflight.json"), "new_model_calls": 0})
@@ -267,8 +272,9 @@ def preflight():
 
 def dispatch(budget, body, logical_id, allocation, job):
     phase = os.environ["CYCLE_PHASE"]
-    key = logical_id.removeprefix(phase + "/")
+    key = fixed_probe_key(logical_id, phase)
     probes = read_json(Path("/preflight/wire-probes.json"))
+    require(not logical_id.endswith("/hardware-tool") or key in probes, "Fixed hardware request lacks its reviewed probe")
     if key in probes:
         require(body == probes[key], "Actual fixed wire differs from the reviewed probe: " + key)
     try:
