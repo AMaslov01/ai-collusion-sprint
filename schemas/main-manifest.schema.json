@@ -1,0 +1,503 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "pipeline",
+    "sample",
+    "science",
+    "analysis",
+    "budget",
+    "hardware",
+    "gates",
+    "artifacts"
+  ],
+  "properties": {
+    "schema": {
+      "const": "main_experiment_manifest_v1"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{2,79}$"
+    },
+    "pipeline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code_commit",
+        "config_path",
+        "config_sha256",
+        "assets_sha256",
+        "image_digest",
+        "model_revision",
+        "file_sha256"
+      ],
+      "properties": {
+        "code_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "config_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "config_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "assets_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "image_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "model_revision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "file_sha256": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "sample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assigned_group_count",
+        "group_ids",
+        "dev_exposure_group_ids",
+        "prefix_condition_by_group",
+        "prefix_task_indices",
+        "future_task_indices",
+        "arms",
+        "prefixes_per_group",
+        "eligibility_rule",
+        "eligibility_before_model_outcomes",
+        "replacement_policy"
+      ],
+      "properties": {
+        "assigned_group_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "group_ids": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "dev_exposure_group_ids": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "prefix_condition_by_group": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "enum": [
+              "nominal",
+              "private_goal_induction"
+            ]
+          }
+        },
+        "prefix_task_indices": {
+          "const": [
+            1,
+            2
+          ]
+        },
+        "future_task_indices": {
+          "const": [
+            3,
+            4
+          ]
+        },
+        "arms": {
+          "const": [
+            "F",
+            "S",
+            "C",
+            "CV",
+            "CVP",
+            "R"
+          ]
+        },
+        "prefixes_per_group": {
+          "const": 1
+        },
+        "eligibility_rule": {
+          "type": "string",
+          "minLength": 1
+        },
+        "eligibility_before_model_outcomes": {
+          "const": true
+        },
+        "replacement_policy": {
+          "const": "no_replacement"
+        }
+      }
+    },
+    "science": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "primary_population",
+        "primary_contrast",
+        "secondary_contrasts",
+        "harm_definition",
+        "utility_definition",
+        "formation_definition",
+        "formation_annotation_policy",
+        "Q_human_mapping_policy",
+        "source_reference_policy"
+      ],
+      "properties": {
+        "primary_population": {
+          "enum": [
+            "all_assigned_eligible_prefixes",
+            "confirmed_prefix_coalitions"
+          ]
+        },
+        "primary_contrast": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "metric",
+            "minuend",
+            "subtrahend"
+          ],
+          "properties": {
+            "metric": {
+              "enum": [
+                "H",
+                "U",
+                "Q",
+                "initial_Q"
+              ]
+            },
+            "minuend": {
+              "enum": [
+                "F",
+                "S",
+                "C",
+                "CV",
+                "CVP",
+                "R"
+              ]
+            },
+            "subtrahend": {
+              "enum": [
+                "F",
+                "S",
+                "C",
+                "CV",
+                "CVP",
+                "R"
+              ]
+            }
+          }
+        },
+        "secondary_contrasts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "metric",
+              "minuend",
+              "subtrahend"
+            ],
+            "properties": {
+              "metric": {
+                "enum": [
+                  "H",
+                  "U",
+                  "Q",
+                  "initial_Q"
+                ]
+              },
+              "minuend": {
+                "enum": [
+                  "F",
+                  "S",
+                  "C",
+                  "CV",
+                  "CVP",
+                  "R"
+                ]
+              },
+              "subtrahend": {
+                "enum": [
+                  "F",
+                  "S",
+                  "C",
+                  "CV",
+                  "CVP",
+                  "R"
+                ]
+              }
+            }
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "harm_definition": {
+          "type": "string",
+          "minLength": 1
+        },
+        "utility_definition": {
+          "type": "string",
+          "minLength": 1
+        },
+        "formation_definition": {
+          "type": "string",
+          "minLength": 1
+        },
+        "formation_annotation_policy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "Q_human_mapping_policy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_reference_policy": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cluster_unit",
+        "resampling",
+        "bootstrap_draws",
+        "confidence_level",
+        "degeneracy_policy",
+        "missing_policy",
+        "effect_sign_or_significance_is_readiness_gate",
+        "analysis_code_sha256"
+      ],
+      "properties": {
+        "cluster_unit": {
+          "const": "source_group"
+        },
+        "resampling": {
+          "const": "paired_cluster_bootstrap"
+        },
+        "bootstrap_draws": {
+          "type": "integer",
+          "minimum": 1000
+        },
+        "confidence_level": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 1
+        },
+        "degeneracy_policy": {
+          "const": "flag_and_do_not_claim_equivalence"
+        },
+        "missing_policy": {
+          "const": "all_assigned_bounds_separate_from_sampling_CI"
+        },
+        "effect_sign_or_significance_is_readiness_gate": {
+          "const": false
+        },
+        "analysis_code_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_model_attempts",
+        "max_input_output_tokens",
+        "gpu_container_seconds",
+        "gpu_service_accounting",
+        "absolute_cutoff_utc",
+        "max_attempts_per_logical_request",
+        "allocations"
+      ],
+      "properties": {
+        "max_model_attempts": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_input_output_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "gpu_container_seconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "gpu_service_accounting": {
+          "const": "sum_allocated_container_lifetimes"
+        },
+        "absolute_cutoff_utc": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+        },
+        "max_attempts_per_logical_request": {
+          "const": 1
+        },
+        "allocations": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "prefix_actors",
+            "memory_builders",
+            "continuation_actors"
+          ],
+          "properties": {
+            "prefix_actors": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "memory_builders": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "continuation_actors": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      }
+    },
+    "hardware": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "host",
+        "gpu_uuids",
+        "gpu_names",
+        "tensor_parallel_size",
+        "endpoint_count",
+        "cpu_limit",
+        "RAM_limit_GiB",
+        "shm_GiB"
+      ],
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1
+        },
+        "gpu_uuids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^GPU-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "gpu_names": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": false
+        },
+        "tensor_parallel_size": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "endpoint_count": {
+          "const": 1
+        },
+        "cpu_limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "RAM_limit_GiB": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "shm_GiB": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "readiness_receipt_sha256",
+        "require_human_main_approval",
+        "require_source_first_references",
+        "require_human_Q_mapping",
+        "require_human_formation_labels",
+        "cache_replay_required"
+      ],
+      "properties": {
+        "readiness_receipt_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "require_human_main_approval": {
+          "const": true
+        },
+        "require_source_first_references": {
+          "const": true
+        },
+        "require_human_Q_mapping": {
+          "const": true
+        },
+        "require_human_formation_labels": {
+          "const": true
+        },
+        "cache_replay_required": {
+          "const": true
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_root",
+        "analysis_export_plan"
+      ],
+      "properties": {
+        "run_root": {
+          "type": "string",
+          "minLength": 1
+        },
+        "analysis_export_plan": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}
