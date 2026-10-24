@@ -1,5 +1,5 @@
 {
-  "status": "human_approved_execution_blocked_by_expired_native_deadline",
+  "status": "human_approved_group1_deadline_exception",
   "scope": "native_group1_checkpoint2_memory_prototype_only",
   "approval_evidence": {
     "thread_id": "01a1688e-8fee-7140-b505-6f93e571c740",
@@ -161,7 +161,8 @@
       "V": 24576,
       "P": 24576
     },
-    "timeout_rule": "One-attempt wall timeout is min(900 seconds, remaining native deadline, remaining package deadline); deadline expiry stops with preserved unknown-spend diagnostics, never resets or retries"
+    "timeout_rule": "One-attempt wall timeout is min(900 seconds, remaining approved group1 task deadline, remaining persistent package deadline); no deadline resets or retries",
+    "task_deadline_utc": "2026-10-24T11:13:00Z"
   },
   "packing": {
     "memory_content_tokens": 2048,
@@ -257,9 +258,7 @@
     "status": "recommendations_only_not_human_approval",
     "applied_to_proposal_only": true
   },
-  "remaining_human_decisions": [
-    "Expired native deadline: explicit extension is required before CPU scientific checks or model calls"
-  ],
+  "remaining_human_decisions": [],
   "not_authorized": [
     "Other11 checkpoints",
     "48builder calls",
@@ -267,5 +266,13 @@
     "Human commitment to all12 checkpoints",
     "Two-agent DEV",
     "Main or test-prefix collection"
-  ]
+  ],
+  "deadline_approval_evidence": {
+    "thread_id": "01a1688e-8fee-7140-b505-6f93e571c740",
+    "human_message_id": "01a16d43-ab1f-79c1-935e-db5bdd1935ed",
+    "question_call_id": "call_ccde6fcdf33a4459a97849c793f89d3c",
+    "human_reply": "Да, только этот пример до 14:13 МСК",
+    "verification": "Direct read_thread of the actual human reply to the group1-only deadline question",
+    "scope": "Only group1 checkpoint2 memory prototype; original native deadline unchanged for all other work"
+  }
 }
