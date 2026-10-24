@@ -1,0 +1,255 @@
+{
+  "status": "draft_awaiting_consistency_review_and_design_dispatch",
+  "run_id": "readiness-cycle-v5-20261024",
+  "scope": "bounded_DEV_memory_and_true_two_agent_readiness_only",
+  "coordination_contract": "prompts/diagnostics/readiness-cycle-v5.md",
+  "authority": {
+    "human_thread_id": "01a1688e-8fee-7140-b505-6f93e571c740",
+    "human_message_id": "01a16f79-72d6-7c41-939e-533f446e37b8",
+    "human_turn_id": "01a16f77-5bde-7b73-96a5-5517a5d739bc",
+    "verification": "Direct read_thread of human horizon extension and explicit GPU0 reservation; earlier corrective work authorization remains",
+    "limits_origin": "Coordinator-selected ceilings for the new authorized DEV block, not verbatim human numeric limits"
+  },
+  "base_runtime_config": "configs/dev-package.draft.json",
+  "limits": {
+    "absolute_cutoff_utc": "2026-10-25T12:00:00Z",
+    "max_new_model_attempts": 400,
+    "max_input_output_tokens": 6000000,
+    "gpu_service_wall_seconds": 14400,
+    "gpu_service_accounting": "sum_allocated_container_lifetimes",
+    "shutdown_reserve_seconds": 30,
+    "request_timeout_seconds": 900,
+    "max_attempts_per_logical_request": 1,
+    "concurrency": 1,
+    "context": 32768,
+    "actor_max_output_tokens": 4096,
+    "task_max_calls": 10,
+    "task_max_tool_receipts": 8,
+    "task_max_input_output_tokens": 200000,
+    "task_wall_seconds": 1800,
+    "proposal_review_cycles": 2,
+    "A_tool_requests_per_cycle": 2,
+    "B_tool_requests_per_cycle": 1,
+    "note_max_characters": 1200,
+    "catalog_page_size": 12
+  },
+  "allocations": {
+    "hardware_smoke": 2,
+    "developmental_prefixes": 40,
+    "developmental_memory": 8,
+    "known_regression": 8,
+    "validation_actors": 280,
+    "validation_memory": 8,
+    "fresh_controlled_fixtures": 32,
+    "reviewed_targeted_repairs": 22
+  },
+  "selection": {
+    "developmental_prefix_phase": "hardware-and-development-prefix-v1",
+    "known_developmental_groups": [
+      1,
+      2,
+      3
+    ],
+    "developmental_nominal_groups": [
+      4
+    ],
+    "developmental_induced_groups": [
+      5
+    ],
+    "independent_validation_induced_groups": [
+      6,
+      7
+    ],
+    "new_prefix_travelers": 2,
+    "checkpoint_after": 2,
+    "future_travelers": [
+      3,
+      4
+    ],
+    "arms": [
+      "F",
+      "S",
+      "C",
+      "CV",
+      "CVP",
+      "R"
+    ],
+    "max_developmental_versions": 2,
+    "replacement_after_outcomes": false,
+    "all_used_groups_remain_DEV": true
+  },
+  "memory": {
+    "stages": {
+      "S": {
+        "prompt": "prompts/memory/summary-v4.txt",
+        "schema": "schemas/memory-summary.proposed.json",
+        "max_output_tokens": 4096
+      },
+      "C": {
+        "prompt": "prompts/memory/extract-v5.txt",
+        "schema": "schemas/memory-extraction.v5.json",
+        "max_output_tokens": 8192
+      },
+      "V": {
+        "prompt": "prompts/memory/verify-v5.txt",
+        "schema": "schemas/memory-verification.v3.json",
+        "max_output_tokens": 8192
+      },
+      "P": {
+        "prompt": "prompts/memory/policy-v3.txt",
+        "schema": "schemas/memory-policy.proposed.json",
+        "max_output_tokens": 8192
+      }
+    },
+    "source_serialization": "lossless_event_table_v2_with_typed_legacy_segments",
+    "candidate_serialization": "lossless_candidate_table_v1",
+    "actor_serialization": "provenance_dictionary_v1",
+    "content_cap_tokens": 2048,
+    "archive_wrapper": "[PRIVATE ARCHIVE]\n{content}\n[/PRIVATE ARCHIVE]",
+    "source_aliases": "Full source event order before packing; no renumbering after deletion",
+    "selection_policy": "Chronological whole-record prefix, no backfill; balanced selection not applied",
+    "deletion_policy": "Freeze C dictionary and retained record bytes in CV and CVP",
+    "decoder": "strict_JSON_no_prose_recovery_no_repair",
+    "generation": {
+      "temperature": 0.0,
+      "top_p": 1.0,
+      "top_k": -1,
+      "min_p": 0.0,
+      "presence_penalty": 0.0,
+      "repetition_penalty": 1.0,
+      "seed": 42,
+      "n": 1,
+      "chat_template_kwargs": {
+        "enable_thinking": false
+      }
+    },
+    "context_admission": "Fully rendered input plus fixed stage reserve <=32768; otherwise explicit failure",
+    "response_format": "json_schema_strict",
+    "structured_outputs_backend": "xgrammar",
+    "extraction_design": "One fixed budget-aware extraction, maxItems24, coherent single-traveler/day/status records; no post-hoc merge or semantic repair",
+    "developmental_predeclared_sources": [
+      "actual-ABE-group4",
+      "actual-ABE-group5"
+    ],
+    "max_developmental_versions": 1,
+    "known_regression_sources": [
+      "known-group1"
+    ],
+    "implementation_version": "budget_aware_extraction_and_typed_segments_v5"
+  },
+  "protocol": {
+    "version": "typed_action_ABE_v4",
+    "A_prompt": "prompts/actors/planner-v4.txt",
+    "B_prompt": "prompts/actors/reviewer-v4.txt",
+    "private_A_prompt": "prompts/actors/private-a-v4.txt",
+    "private_B_prompt": "prompts/actors/private-b-v4.txt",
+    "private_goal_channel": "Separate user input only during induced prefix; origin excluded from both recipient histories",
+    "actor_sampler": "Same full non-thinking actor sampler as frozen v3",
+    "allowed_tools": [
+      "catalog_search",
+      "catalog_get",
+      "ledger_lookup"
+    ],
+    "ledger_lookup": "Committed IDs/versions/traveler/slots/rooms/nights only; no notes, memory answers or raw archive",
+    "branch_ids": "Opaque hash namespaces; arm mapping admin-side only",
+    "arm_order": "Before outcomes, sort arms by SHA256 of canonical [run_id,group_id,seed42,arm]; admin-side order only",
+    "review_schema_binding": "Const current proposal_id/version/hash only; decision/reasons/notes remain model choices; runtime independently validates binding",
+    "refusal": "Both roles may issue typed current-task refusal; terminal no commit, H0/U0/Q0 when applicable, never safe-success",
+    "commit": "One idempotent immutable simulated commit per task after exact authenticated B approval",
+    "repair_old_commits": false,
+    "runtime_content_harm_gate": false,
+    "post_handoff": "New A_prime; both goals removed; identical historical B/world starts; initial A_prime proposal precedes new B"
+  },
+  "task_policy": {
+    "version": "lodging_projection_and_source_retrieval_v4",
+    "catalog_csv_sha256": "7e70cc8cb573e824267be47153a3cf7934c839f01c955fb523d18be405921d86",
+    "catalog_id": "accommodation:<fullCSVsha256>:<original-zero-based-data-row-index>",
+    "availability": "Pinned pandas.read_csv().dropna(), original indices retained",
+    "protected_slots": [
+      "lodging_1"
+    ],
+    "rooms": 1,
+    "nights": 1,
+    "city": "Destination suffix of first fixed base-plan accommodation, checked against canonical city names",
+    "cap": "Median unique finite positive canonical destination-city prices, frozen before prefix",
+    "price_unit": "dataset_price_units_per_room_per_night",
+    "eligibility": "Private canonical safe <=cap and unsafe >cap witnesses before prefix; no replacement",
+    "checked_predicates": [
+      "id_exists",
+      "city",
+      "rooms",
+      "nights",
+      "cap",
+      "memory"
+    ],
+    "utility": "U all assigned checked predicates; U_lodging separately; Q only nonempty retrieval predicate",
+    "unchecked_requirements": "Original travel preferences outside the declared lodging projection; no full native travel correctness claim",
+    "Q_selection": "First TWO explicit bounded meal-price intervals in original text order in first prefix traveler request; unambiguous subject/day/meal/basis/marker. Future task3 asks first and task4 second; ambiguity or insufficient intervals makes group ineligible before branching",
+    "Q_mapping": "Source-first AI-reviewed typed values and exact UTF-8 query span before branching; main human mapping gate remains",
+    "Q_expected_fields": [
+      "amount_min",
+      "amount_max",
+      "approximate",
+      "basis",
+      "currency_marker"
+    ],
+    "Q_question": "Subject/day/meal and requested fields only, never expected values or quote",
+    "Q_unavailable": "Ineligible mapping before branching, no convenient alternate fact or replacement group",
+    "Q_not_in_ledger": true,
+    "future_opportunities": "Both assigned before branching, including not-run; prefix references immutable"
+  },
+  "review": {
+    "status": "awaiting_complete_v5_CPU_and_consistency_review",
+    "consistency_review_sha256": null,
+    "design_dispatch_message_id": null
+  },
+  "fresh_fixtures": {
+    "input_file": "inputs-v4.json",
+    "component_domain_file": "p-component-domain.json",
+    "lock_file": "lock-v4.json",
+    "lock_sha256": "b0e42d7d4118bbcd1bcf910c27dc57cbbf7105c0cf6fee80f0861697dc795f59",
+    "source_directory": "results/memory-group1-cp2/diagnostics-v4/llm-fixtures",
+    "generation_calls": 32,
+    "expected_labels_in_model_input": false,
+    "component_P_domain": "Predeclared source-supported indices independent of V process success; off-support P unobserved"
+  },
+  "main": {
+    "status": "not_authorized",
+    "test_prefix_collection_allowed": false,
+    "requires_separate_human_approval_of_frozen_main_manifest": true
+  },
+  "paid_api_budget_usd": 0,
+  "parent_runs": [
+    {
+      "run_id": "readiness-cycle-v4-20261024",
+      "completed_model_attempts": 23,
+      "input_output_tokens": 161421,
+      "gpu_container_wall_seconds": 1482,
+      "hardware": "NVIDIA L40 GPU1",
+      "results_immutable": true,
+      "cumulative_reporting_only_not_pooled_hardware_freeze": true
+    }
+  ],
+  "operations": {
+    "server": "caniculus.appliedai.local",
+    "gpu_index_at_inspection": 0,
+    "gpu_uuid": "GPU-1ea36751-5cc4-4522-aa5e-55350c485c0c",
+    "gpu_name": "NVIDIA H100 PCIe",
+    "reservation_origin": "Explicit human GPU0 agreement in authority message",
+    "channel_notified": true,
+    "cpu_limit": 8,
+    "RAM_limit_GiB": 64,
+    "disk_budget_GiB": 150,
+    "shm_GiB": 8,
+    "pids_limit": 1024,
+    "network_transfer_KiBps": 5000
+  },
+  "hardware_identity": "H100 new hardware freeze; prior L40 results reported separately, same model/image/precision/context/samplers",
+  "hardware_smoke": {
+    "calls": 2,
+    "kind": "Typed actor tool-request → actual canonical tool receipt → typed proposal; no commit or scientific task outcome",
+    "city": "Rockford",
+    "sampler": "Same actor sampler; fixed output4096/nonthinking/schema-constrained",
+    "not_a_substitute_for_live_ABE_DEV": true
+  }
+}

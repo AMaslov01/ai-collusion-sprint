@@ -26,15 +26,29 @@ ALIAS = "qwen-native-dev"
 
 
 def settings():
-    config = read_json(CODE / "configs/readiness-cycle-v4.json")
+    config = read_json(contract_path())
     base = read_json(CODE / config["base_runtime_config"])
     assets = {stage: {"prompt": (CODE / spec["prompt"]).read_text(), "schema": read_json(CODE / spec["schema"])}
               for stage, spec in config["memory"]["stages"].items()}
     return config, base, assets
 
 
+def memory_implementation(config):
+    if config["memory"].get("implementation_version") == "budget_aware_extraction_and_typed_segments_v5":
+        from .memory_v5 import messages_v5, resolve_v5, full_delivery_v5
+        return messages_v5, resolve_v5, full_delivery_v5
+    return messages_v4, resolve_v4, full_delivery_v4
+
+
+def contract_path():
+    name = os.environ.get("READINESS_CONTRACT", "readiness-cycle-v4.json")
+    require(name in {"readiness-cycle-v4.json", "readiness-cycle-v5.json"}, "Unrecognized bounded DEV contract")
+    return CODE / "configs" / name
+
+
 def payload(stage, source, candidates, config, assets):
-    messages = messages_v4(stage, source, candidates, assets[stage])
+    message_builder, _, _ = memory_implementation(config)
+    messages = message_builder(stage, source, candidates, assets[stage])
     return constrained_payload(ALIAS, config["memory"]["generation"], messages, assets[stage]["schema"],
                                config["memory"]["stages"][stage]["max_output_tokens"])
 
@@ -52,12 +66,13 @@ def content(response):
 
 def phase_identity(config, base, assets):
     return {"run_id": config["run_id"], "phase": os.environ.get("CYCLE_PHASE", "development-memory-v1"),
-            "code_commit": os.environ["ADAPTER_COMMIT"], "config_sha256": sha256((CODE / "configs/readiness-cycle-v4.json").read_bytes()).hexdigest(),
+            "code_commit": os.environ["ADAPTER_COMMIT"], "config_sha256": sha256(contract_path().read_bytes()).hexdigest(),
             "assets_sha256": fingerprint(assets), "limits": config["limits"], "allocations": config["allocations"],
             "model": base["model"], "image_digest": base["runtime"]["image_digest"],
             "actor_sampler": base["generation"], "builder_sampler": config["memory"]["generation"],
             "source_serialization": config["memory"]["source_serialization"], "content_serialization": config["memory"]["actor_serialization"],
-            "selection_policy": config["memory"]["selection_policy"], "main_started": False}
+            "selection_policy": config["memory"]["selection_policy"], "operational_hardware": config.get("operations"),
+            "parent_runs": config.get("parent_runs", []), "main_started": False}
 
 
 def verify_final_DEV_freeze(identity):
@@ -77,7 +92,8 @@ def verify_dispatch(identity):
     require(identity["phase"] in receipt["allowed_phases"], "Phase not included in dispatch")
     for key in ("code_commit", "config_sha256", "assets_sha256"):
         require(receipt[key] == identity[key], "Review/actual identity mismatch: " + key)
-    require(receipt.get("design_dispatch_message_id") and receipt.get("human_authority_message_id") == "01a16e81-449a-7152-a8f6-77d8a0a37419", "No authority provenance")
+    config, _, _ = settings()
+    require(receipt.get("design_dispatch_message_id") and receipt.get("human_authority_message_id") == config["authority"]["human_message_id"], "No authority provenance")
     review = REVIEW / receipt["consistency_review_file"]
     require(sha256(review.read_bytes()).hexdigest() == receipt["consistency_review_sha256"], "Consistency review changed")
     require(read_json(review)["status"] in {"pass", "pass_for_phase"}, "Blocking consistency review")
@@ -119,9 +135,11 @@ def smoke_payload(config):
 def preflight():
     config, base, assets = settings()
     identity = phase_identity(config, base, assets)
-    if identity["phase"] == "development-prefix-v1":
-        from .abe_cycle import actor_preflight
+    if identity["phase"] in {"development-prefix-v1", "hardware-and-development-prefix-v1"}:
+        from .abe_cycle import actor_preflight, hardware_smoke_request
         actor_preflight(config, base, assets, WORK, [4, 5])
+        if identity["phase"] == "hardware-and-development-prefix-v1":
+            atomic_json(WORK / "wire-probes.json", {"hardware-tool": hardware_smoke_request(config, base)})
         atomic_json(WORK / "phase-manifest.json", identity)
         atomic_json(WORK / "preflight.json", {"status": "passed_no_model_calls", "identity": identity,
                     "actor_preflight": read_json(WORK / "actor-preflight.json"), "new_model_calls": 0})
@@ -165,7 +183,7 @@ def preflight():
         probes = {}
         sources = {}
         for number in (4, 5):
-            path = ROOT / f"development-prefix-v1/prefix/group-{number}/source.json"
+            path = ROOT / config["selection"].get("developmental_prefix_phase", "development-prefix-v1") / f"prefix/group-{number}/source.json"
             source = read_json(path)
             require(read_json(path.parent / "status.json")["status"] == "prefix_collected", "Prefix incomplete; cannot build its memory")
             sources[str(number)] = {"archive_sha256": source["archive_sha256"], "file_sha256": sha256(path.read_bytes()).hexdigest()}
@@ -231,6 +249,7 @@ def memory_job(source, job, identity, config, assets, budget, count_tokens, *, a
     atomic_json(job / "assets.json", assets)
     atomic_json(job / "manifest.json", {"job_id": identity, "source_archive_sha256": source["archive_sha256"], "assets_sha256": fingerprint(assets)})
     persist = lambda name, value: atomic_json(job / "automatic-withheld" / name, value)
+    message_builder, resolve, full_delivery = memory_implementation(config)
     def generate(stage, candidates_messages):
         body = constrained_payload(ALIAS, config["memory"]["generation"], candidates_messages, assets[stage]["schema"],
                                    config["memory"]["stages"][stage]["max_output_tokens"])
@@ -238,8 +257,8 @@ def memory_job(source, job, identity, config, assets, budget, count_tokens, *, a
         return content(response)
     try:
         summary = build_packages(source, {"packing": {"archive_wrapper": config["memory"]["archive_wrapper"]}}, assets,
-                                 generate, count_tokens, persist, decode=decode_v4, resolve=resolve_v4,
-                                 full_archive_content=full_delivery_v4, message_builder=messages_v4, record_packer=record_packer(source["archive"]))
+                                 generate, count_tokens, persist, decode=decode_v4, resolve=resolve,
+                                 full_archive_content=full_delivery, message_builder=message_builder, record_packer=record_packer(source["archive"]))
         status = {"status": "built", "summary": summary}
     except Exception as error:
         status = {"status": "failed", "failure_type": type(error).__name__, "traceback": traceback.format_exc()}
@@ -289,7 +308,7 @@ def run_client():
     config, base, assets = settings()
     identity = phase_identity(config, base, assets)
     receipt = verify_dispatch(identity)
-    require(identity["phase"] in {"development-memory-v1", "development-prefix-v1", "development-checkpoint-memory-v1", "validation-prefix-v1", "validation-continuations-v1"}, "This phase is not yet implemented/reviewed")
+    require(identity["phase"] in {"development-memory-v1", "development-prefix-v1", "hardware-and-development-prefix-v1", "development-checkpoint-memory-v1", "validation-prefix-v1", "validation-continuations-v1"}, "This phase is not yet implemented/reviewed")
     master = {"run_id": config["run_id"], "authority": config["authority"], "limits": config["limits"],
               "allocations": config["allocations"], "selection": config["selection"], "model": base["model"],
               "runtime": base["runtime"], "paid_api_budget_usd": 0}
@@ -304,8 +323,10 @@ def run_client():
     jobs = {}
     with httpx.Client(trust_env=False, follow_redirects=False, transport=httpx.HTTPTransport(retries=0)) as http:
         budget = CycleBudget(ROOT, config, http, phase_work=WORK)
-        if identity["phase"] == "development-prefix-v1":
-            from .abe_cycle import prefix_phase
+        if identity["phase"] in {"development-prefix-v1", "hardware-and-development-prefix-v1"}:
+            from .abe_cycle import hardware_smoke, prefix_phase
+            if identity["phase"] == "hardware-and-development-prefix-v1":
+                hardware_smoke(config, base, budget, WORK)
             return prefix_phase(config, base, budget, WORK)
         if identity["phase"] == "validation-prefix-v1":
             from .abe_cycle import validation_prefix_phase
@@ -332,12 +353,13 @@ def run_client():
         if identity["phase"] == "development-checkpoint-memory-v1":
             reviewed = read_json(Path("/preflight/preflight.json"))["sources"]
             for number in (4, 5):
-                source_path = ROOT / f"development-prefix-v1/prefix/group-{number}/source.json"
+                source_path = ROOT / config["selection"].get("developmental_prefix_phase", "development-prefix-v1") / f"prefix/group-{number}/source.json"
                 source = read_json(source_path)
                 require(sha256(source_path.read_bytes()).hexdigest() == reviewed[str(number)]["file_sha256"], "Reviewed A/B archive changed")
                 key = f"checkpoint-group-{number}"
                 jobs[key] = memory_job(source, WORK / "memory" / key, identity["phase"] + "/" + key, config, assets, budget,
-                                      lambda text: len(tokens.encode(text, add_special_tokens=False)))
+                                      lambda text: len(tokens.encode(text, add_special_tokens=False)),
+                                      allocation="developmental_memory" if config["run_id"].startswith("readiness-cycle-v5") else "developmental_memory_and_known_fixtures")
             atomic_json(WORK / "phase-status.json", {"status": "finished_with_explicit_job_statuses", "jobs": jobs,
                         "global_budget": budget.state(), "main_started": False})
             return
@@ -370,7 +392,7 @@ def main():
     config, base, assets = settings()
     identity = phase_identity(config, base, assets)
     verify_dispatch(identity)
-    require(identity["phase"] in {"development-memory-v1", "development-prefix-v1", "development-checkpoint-memory-v1", "validation-prefix-v1", "validation-continuations-v1"}, "No unreviewed phase startup")
+    require(identity["phase"] in {"development-memory-v1", "development-prefix-v1", "hardware-and-development-prefix-v1", "development-checkpoint-memory-v1", "validation-prefix-v1", "validation-continuations-v1"}, "No unreviewed phase startup")
     if identity["phase"].startswith("validation-"):
         verify_final_DEV_freeze(identity)
     deadline = min(float(os.environ["PACKAGE_DEADLINE_UNIX"]), time.time() + config["limits"]["gpu_service_wall_seconds"])

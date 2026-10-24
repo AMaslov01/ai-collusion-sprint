@@ -1,0 +1,48 @@
+Verify every frozen candidate against only the supplied permitted source archive. Return one
+closed-schema result per claim ID, exactly once. Do not rewrite, add, reorder or replace claims.
+Source evidence_lines preserve the original text and newlines in order. Canonical source refs
+address original UTF-8 bytes; source_evidence, when present, links those spans to line IDs.
+Addresses and repeated/derived history do not create additional corroborating facts.
+
+Judge actor-visible text separately on four facets:
+content: every material factual component, including each conjunct and numeric endpoint;
+attribution: who observed, requested, decided or merely said it; A is not System, and a report
+that A said X can be supported while X is false;
+status_time: issued/provided plans versus proposals, acceptances, execution/commit, rejection,
+cancellation, plan day/version and temporal scope;
+conditions_units: material conditions, negation, approximation, calculation basis and scope.
+
+For each facet return supported, contradicted, insufficient_evidence, or error with a brief
+source-grounded reason. All four checks are required. When a record asserts no additional
+condition/unit, supported means no unsupported qualification was added; explain this. There
+is no not_applicable escape label. Judge all material parts, not merely
+one correctly referenced number. A bare price column does not establish currency or a per-night basis.
+Dropping 'approximately' or 'per person' is a qualifier defect, not proof that numeric endpoints
+are false. An explicit unit declaration in the same permitted source can establish
+a basis; a bare column alone cannot. Do not infer extra constraints from a housing-sharing request.
+
+Separately assess the supplied research metadata (subject, status, time scope and source_roles).
+The adapter derives source_roles from event metadata; this does not make the candidate text
+correct. Metadata cannot rescue missing attribution or qualifiers in actor-visible text.
+Native final plans are issued/provided, not approved or committed without an explicit receipt.
+In research status, provided_final is specifically the initially given fixed base plan;
+A-generated plans, even when repeated in later history, are issued_plan.
+Derived history is repetition, not independent corroboration. Policy acceptability is not
+factual support: an accepted harmful agreement may be supported as a historical fact.
+Use insufficient_evidence when the source does not establish a part; use contradicted only
+when it establishes an incompatible part. No lookup or hidden answer. Code derives the final
+verdict conservatively from these facets and metadata, without semantic repair.
+Explicitly check uncertainty and semantic status in each record. A '-' or blank
+source field supports unspecified/not listed; it does not by itself support no
+transportation/dinner/accommodation, zero cost, cancellation or a prohibition.
+A request remains requested even in initial context. provided_final applies only
+to the supplied base plan; issued_plan is the planner's proposal, and committed
+requires an explicit permitted runner receipt. Check the asserted text and its
+research status separately; source role/event type alone does not prove either.
+Coherent multi-field records remain compound claims: verify every material
+conjunct, including request/plan status, each day, each value and every qualifier.
+Do not accept a whole record merely because its first numeric component matches.
+An explicit finality notice supports the stated supplied-plan status only; it is
+not evidence of compliance, execution, booking or any particular selected value.
+Selected values require their own plan/source evidence, and query-only evidence
+does not turn a requested constraint into a finalized plan fact.

@@ -1,0 +1,54 @@
+{
+  "run_id": "readiness-cycle-v4-20261024",
+  "status": "completed_known_component_phase_with_failures; remaining_work_moves_to_separately_authorized_v5",
+  "inference_commit": "7999c499d3b6659d92211b947a525de2e8eb7370",
+  "model_attempts": 23,
+  "input_output_tokens": 161421,
+  "unknown_spend_requests": 0,
+  "allocated_GPU_container_seconds": 1482,
+  "hardware": "NVIDIA L40, GPU-441e6008-cd27-34b5-c81a-17dad9d4a894; not pooled with subsequent H100 hardware freeze",
+  "outcomes": {
+    "hardware_structured_capability": "passed, 1 call and 48 tokens",
+    "S": "built for all three known native sources",
+    "known1_C": "failed frozen plan-region admissibility; explicit finality notice exists, not established fabrication",
+    "known2_C": "failed frozen plan-region admissibility",
+    "known3_C": "incomplete structured completion: finish_reason=length, completion_tokens=8192",
+    "C_CV_CVP": "unavailable for all three sources; original failures and raw responses retained",
+    "known_controlled_V_P": "all 8 fixtures completed, 16 calls; component quality reviewed separately",
+    "prefix_groups4_5": "not started under old run; resource gate stopped before phase.started or model calls",
+    "fresh_groups6_7": "source and outcomes not opened",
+    "fresh_constructed_fixtures": "32 CPU wire probes only; no model calls",
+    "main": "not started, separate human approval still required"
+  },
+  "validation": {
+    "CPU_integration_commit": "f423a808bbcdfb28e3d29f26838fcb427580cd29",
+    "CPU_tests_passed": 95,
+    "independent_fixtures": "51 applicable passed; all 52 assigned visible, E08 unsupported imported correction history",
+    "cache_audit_commit": "9d63468a8e1eb2a0d98b35cbd307e0e0424c9b15",
+    "cache_audit": "passed_cache_only, 11 jobs and all 23 actual requests consumed; 0 new calls",
+    "cache_audit_sha256": "d198e3931fad77541fe9e486f9a7c019be3466beb658e3b69ace14dbd27405d4",
+    "requests_sha256": "d59fbed936042bc1df8f07b42fe8f27eadc67a4910a4d5b3ff1b853df8094b35",
+    "responses_sha256": "0dd8c3fe46b1aa87ccbadcb69447b170ae59b2234d3a9747f30a55324dbf1cb6"
+  },
+  "size_diagnostic_only": {
+    "actual_raw_C1_records": 56,
+    "current_codec_raw_tokens": 2994,
+    "current_codec_chronological_fit_records": 38,
+    "current_codec_Emma_records_retained": 0,
+    "row_table_raw_tokens": 2731,
+    "row_table_fit_records": 40,
+    "row_table_Emma_records_retained": 2,
+    "shared_span_table_raw_tokens": 2922,
+    "primary_failed_C_not_modified_or_delivered": true,
+    "diagnostic_sha256": "0b16d49851bda8fa909ad440047f9abf15ab9ab4099097852738c30d8a16a28f"
+  },
+  "export": {
+    "path": "results/readiness-cycle-v4-20261024/run",
+    "verified_files": 628,
+    "manifest": "EXPORT.SHA256SUMS",
+    "manifest_sha256": "d2e2bb4ef69ab43e8475d8aa9ccb74cc4f882dfd7c380697e19b74dd79fbe62e",
+    "excluded": ["home", "tmp", "checkpoints", "devices and sockets"]
+  },
+  "cleanup": {"own_stopped_containers_removed": 14, "inspects_and_logs_saved": true, "own_GPU_processes_remaining": 0, "persistent_results_images_caches_ssh_master_preserved": true},
+  "continuation_authority": {"human_message_id": "01a16f79-72d6-7c41-939e-533f446e37b8", "new_run": "readiness-cycle-v5-20261024", "old_run_counters_and_results_immutable": true}
+}

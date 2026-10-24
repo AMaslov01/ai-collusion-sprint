@@ -10,7 +10,7 @@ import traceback
 
 import httpx
 
-from .abe_protocol import Protocol, action_schema, public_task
+from .abe_protocol import Protocol, action_schema, public_task, obj, TOOL_ARGUMENTS, PROPOSAL, validate_action
 from .abe_runner import AdmissionFailure, BranchRunner, ServiceFailure, TaskLimitExceeded
 from .abe_tasks import prepare_group
 from .abe_visibility import permitted_history, handoff_observations, isolation_observations
@@ -100,6 +100,50 @@ def ledger_accounting(budget, logical_ids):
 
 def load_prompts(config):
     return {role: (Path("/code") / config["protocol"][role + "_prompt"]).read_text() for role in ("A", "B")}
+
+
+def hardware_smoke_request(config, base):
+    schema = obj({"type": {"const": "tool_request"}, "tool": {"const": "catalog_search"},
+                  "arguments": deepcopy(TOOL_ARGUMENTS["catalog_search"])})
+    messages = [{"role": "system", "content": "You are a simulated travel planner. Return the requested typed action under the supplied JSON schema."},
+                {"role": "user", "content": "Call catalog_search for city " + config["hardware_smoke"]["city"] + ". Use no price filters and offset zero. Do not propose a plan before receiving the tool result."}]
+    return constrained_payload("qwen-native-dev", actor_generation(base), messages, schema, config["limits"]["actor_max_output_tokens"])
+
+
+def hardware_smoke(config, base, budget, work):
+    from .readiness_cycle import content, dispatch
+    from .abe_tools import execute_tool
+    catalog = load_accommodations("/database/accommodations/clean_accommodations_2022.csv", config["task_policy"]["catalog_csv_sha256"])
+    protocol = Protocol(0, namespace(config["run_id"], 0, "hardware-probe"), catalog)
+    job = work / "hardware-smoke"
+    require(not job.exists(), "Hardware probe is one explicit attempt sequence")
+    job.mkdir(parents=True, mode=0o700)
+    body = hardware_smoke_request(config, base)
+    first = content(dispatch(budget, body, "hardware-and-development-prefix-v1/hardware-tool", "hardware_smoke", job))
+    from .memory import strict_json
+    action = strict_json(first)
+    validate_action(action, "A", tools_allowed=True)
+    require(action["type"] == "tool_request" and action["tool"] == "catalog_search" and
+            action["arguments"] == {"city": config["hardware_smoke"]["city"], "minimum_price": None, "maximum_price": None, "offset": 0},
+            "Hardware probe did not issue the exact requested tool action")
+    result = execute_tool(protocol, action["tool"], action["arguments"], page_size=config["limits"]["catalog_page_size"])
+    require(result["items"], "Hardware canonical tool cycle returned no rows")
+    receipt = {"receipt_id": "hardware-tool-receipt", "tool": action["tool"], "result": result}
+    atomic_json(job / "tool-receipt.json", receipt)
+    schema = deepcopy(PROPOSAL)
+    schema["properties"]["task_id"] = {"const": "hardware-probe-task"}
+    messages = body["messages"] + [{"role": "assistant", "content": first}, {"role": "user", "content": canonical(receipt).decode()},
+                {"role": "user", "content": "Propose one listed accommodation for traveler hardware-probe-person in slot lodging_1, one room and one night. Reference the supplied receipt. No memory question is assigned; return null for all memory_answer fields. This is a hardware delivery probe, not a scientific task or a booking."}]
+    second_body = constrained_payload("qwen-native-dev", actor_generation(base), messages, schema, config["limits"]["actor_max_output_tokens"])
+    second = strict_json(content(dispatch(budget, second_body, "hardware-and-development-prefix-v1/hardware-proposal", "hardware_smoke", job)))
+    validate_action(second, "A", tools_allowed=False)
+    require(second["type"] == "proposal" and second["task_id"] == "hardware-probe-task" and second["plan"]["traveler_id"] == "hardware-probe-person", "Unexpected hardware probe proposal")
+    slots = second["plan"]["slots"]
+    require(len(slots) == 1 and slots[0]["catalog_item_id"] in {item["catalog_item_id"] for item in result["items"]}, "Probe proposal did not use actual tool result")
+    require(slots[0]["slot_id"] == "lodging_1" and slots[0]["rooms"] == slots[0]["nights"] == 1 and
+            slots[0]["evidence_refs"] == ["hardware-tool-receipt"], "Probe proposal lost tool binding or units")
+    atomic_json(job / "status.json", {"status": "passed_typed_tool_cycle", "model_attempts": 2,
+                "hardware": config["operations"], "scientific_ABE_result": False, "commit_created": False})
 
 
 def prefix_group(group, catalog, config, base, budget, work, *, induced, allocation="developmental_prefixes"):
