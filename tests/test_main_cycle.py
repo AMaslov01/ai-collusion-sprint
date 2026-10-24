@@ -1,6 +1,7 @@
 """Main orchestration checks using invented tasks and responses, never native IDs."""
 
 from copy import deepcopy
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -8,7 +9,7 @@ from unittest.mock import patch
 
 from collusion_handoff.abe_runner import ServiceFailure
 from collusion_handoff.artifacts import atomic_json, fingerprint, read_json
-from collusion_handoff.main_cycle import assigned_opportunities, approved_pipeline, continuation_group, file_hash, registry_digest, verify_annotations
+from collusion_handoff.main_cycle import assigned_opportunities, approved_pipeline, continuation_group, file_hash, prepare_candidate_frame, registry_digest, verify_annotations
 from collusion_handoff.main_manifest import ManifestError
 import test_abe_continuation as synthetic_continuation
 from test_main_manifest import synthetic_packet
@@ -179,6 +180,40 @@ class MainCycleTests(unittest.TestCase):
                 with patch.dict("os.environ", {"ADAPTER_COMMIT": "b" * 40}):
                     with self.assertRaises(ManifestError):
                         approved_pipeline(review, code)
+
+    def test_candidate_screening_keeps_explicit_frame_order_and_does_not_select_main_N(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            profile = {"scope": "candidate_eligibility_profile_v1", "task_policy": deepcopy(
+                read_json(Path(__file__).resolve().parents[1] / "configs/readiness-cycle-v5.json")["task_policy"])}
+            profile["task_policy"].pop("city_normalization")
+            atomic_json(root / "candidate-profile.json", profile)
+            query = ("I am Alex.\nOn the first day, breakfast should cost $12-$15 per person.\n"
+                     "On the second day, dinner should cost around $20-$25 per person.\n")
+            rows = [{"id": number, "base_person": {"name": "Base", "query": "Synthetic base request",
+                     "daily_plans": [{"accommodation": "Synthetic Hotel, City"}]},
+                     "questions": [query] * (4 if number == 9 else 3)} for number in (9, 10)]
+            source = root / "synthetic-source.jsonl"
+            source.write_text("".join(json.dumps(row) + "\n" for row in rows))
+            catalog = {key: {"catalog_item_id": key, "city": "City", "price": price}
+                       for key, price in (("safe", "80"), ("unsafe", "120"))}
+            configuration = {"schema": "main_candidate_frame_configuration_v1", "code_commit": "a" * 40,
+                "science_freeze_sha256": "c" * 64, "source_sha256": file_hash(source),
+                "eligibility_profile": {"config_path": "candidate-profile.json", "config_sha256": file_hash(root / "candidate-profile.json"),
+                                        "task_policy_sha256": fingerprint(profile["task_policy"])},
+                "ordered_group_ids": [10, 9], "dev_exposure_group_ids": [1, 2],
+                "order_policy": "explicit_order_before_source_screening", "replacement_policy": "no_replacement"}
+            result = prepare_candidate_frame(configuration, code=root, source_path=source, catalog=catalog, actual_commit="a" * 40)
+            self.assertEqual([row["group_id"] for row in result["flow"]["groups"]], [10, 9])
+            self.assertEqual(result["eligible_ids_in_frame_order"], [9])
+            self.assertEqual(result["flow"]["groups"][0]["status"], "ineligible_before_model_outputs")
+            self.assertTrue(all(row["replacement"] is False for row in result["flow"]["groups"]))
+            self.assertFalse(result["main_sample_chosen"])
+            self.assertFalse(result["main_manifest_created"])
+            self.assertEqual((result["prefixes_collected"], result["new_model_calls"]), (0, 0))
+            configuration["dev_exposure_group_ids"].append(9)
+            with self.assertRaises(ManifestError):
+                prepare_candidate_frame(configuration, code=root, source_path=root / "missing-source", catalog=catalog, actual_commit="a" * 40)
 
 
 if __name__ == "__main__":

@@ -1,8 +1,9 @@
 """Main orchestration with explicit inputs and separately verified human gates.
 
 There is no default main configuration, sample, resource or authorization. The
-validate command reads only the manifest. Other commands require the complete
-approval packet before opening native data. DEV entry points remain unchanged.
+validate command reads only the manifest. Candidate-frame screening is a separate
+CPU-only source preparation command. Model phases require the complete approval
+packet. DEV entry points remain unchanged.
 """
 
 import argparse
@@ -112,13 +113,12 @@ def approved_pipeline(review, code):
     return manifest, config, base, assets, authority
 
 
-def prepare_registry(manifest, config, source_path, catalog):
-    """Source-only eligibility, preserving all assigned IDs without replacement."""
+def _prepare_selected_groups(selected_ids, config, source_path, catalog, expected_source_hash):
     from .abe_tasks import prepare_group
     from .memory import strict_json
     source_path = Path(source_path)
-    require(file_hash(source_path) == config["main_data_source"]["sha256"], "Main native source changed")
-    selected = set(manifest["sample"]["group_ids"])
+    require(file_hash(source_path) == expected_source_hash, "Pinned native source changed")
+    selected = set(selected_ids)
     rows = {}
     for line in source_path.read_text().splitlines():
         row = strict_json(line)
@@ -126,7 +126,7 @@ def prepare_registry(manifest, config, source_path, catalog):
             require(row["id"] not in rows, "Duplicate assigned main source ID")
             rows[row["id"]] = row
     groups, flow = {}, []
-    for number in manifest["sample"]["group_ids"]:
+    for number in selected_ids:
         try:
             require(number in rows, "Assigned ID absent from the pinned main data source")
             groups[number] = prepare_group(rows[number], catalog, config)
@@ -135,7 +135,54 @@ def prepare_registry(manifest, config, source_path, catalog):
             status = {"group_id": number, "status": "ineligible_before_model_outputs", "replacement": False,
                       "reason": str(error)}
         flow.append(status)
-    return groups, {"assigned_ids": manifest["sample"]["group_ids"], "groups": flow, "model_outputs_used": False}
+    return groups, {"assigned_ids": selected_ids, "groups": flow, "model_outputs_used": False}
+
+
+def prepare_registry(manifest, config, source_path, catalog):
+    """Source-only eligibility, preserving all assigned IDs without replacement."""
+    return _prepare_selected_groups(manifest["sample"]["group_ids"], config, source_path, catalog,
+                                    config["main_data_source"]["sha256"])
+
+
+def prepare_candidate_frame(configuration, *, code, source_path, catalog, actual_commit):
+    """Screen an explicit source frame without choosing main N or collecting prefixes.
+
+    This is a separate, CPU-only preparation interface. Its configuration must be
+    frozen after the scientific design is chosen. Calling it does not authorize
+    any model phase or create a main experiment manifest.
+    """
+    required = {"schema", "code_commit", "science_freeze_sha256", "source_sha256", "eligibility_profile",
+                "ordered_group_ids", "dev_exposure_group_ids", "order_policy", "replacement_policy"}
+    require(set(configuration) == required and configuration["schema"] == "main_candidate_frame_configuration_v1",
+            "Explicit frozen candidate-frame configuration required")
+    require(configuration["code_commit"] == actual_commit and len(actual_commit) == 40 and
+            all(c in "0123456789abcdef" for c in actual_commit), "Candidate code freeze differs")
+    require(configuration["order_policy"] == "explicit_order_before_source_screening" and
+            configuration["replacement_policy"] == "no_replacement", "Candidate order/replacement rule changed")
+    ids, exposed = configuration["ordered_group_ids"], configuration["dev_exposure_group_ids"]
+    require(isinstance(ids, list) and ids and all(type(number) is int and number >= 0 for number in ids)
+            and len(ids) == len(set(ids)), "Explicit unique ordered screening frame required")
+    require(isinstance(exposed, list) and exposed and all(type(number) is int and number >= 0 for number in exposed)
+            and len(exposed) == len(set(exposed)) and not set(ids) & set(exposed), "Candidate frame overlaps DEV exposure")
+    require(all(isinstance(configuration[key], str) and SHA.fullmatch(configuration[key]) and configuration[key] != "0" * 64
+                for key in ("science_freeze_sha256", "source_sha256")), "Science and native-source freezes are required")
+    spec = configuration["eligibility_profile"]
+    require(set(spec) == {"config_path", "config_sha256", "task_policy_sha256"}, "Explicit eligibility profile required")
+    name = Path(spec["config_path"])
+    code = Path(code)
+    path = code / name
+    require(not name.is_absolute() and ".." not in name.parts and path.resolve().is_relative_to(code.resolve())
+            and file_hash(path) == spec["config_sha256"], "Candidate eligibility profile changed")
+    profile = read_json(path)
+    require(profile["scope"] == "candidate_eligibility_profile_v1" and
+            fingerprint(profile["task_policy"]) == spec["task_policy_sha256"], "Fixed candidate eligibility rule changed")
+    groups, flow = _prepare_selected_groups(ids, profile, source_path, catalog, configuration["source_sha256"])
+    return {"schema": "main_candidate_frame_preparation_v1", "configuration_sha256": fingerprint(configuration),
+            "code_commit": actual_commit, "science_freeze_sha256": configuration["science_freeze_sha256"],
+            "source_sha256": configuration["source_sha256"], "flow": flow, "private_groups": groups,
+            "registry_sha256": registry_digest(groups), "eligible_ids_in_frame_order": [number for number in ids if number in groups],
+            "main_sample_chosen": False, "main_manifest_created": False, "prefixes_collected": 0,
+            "new_model_calls": 0, "human_gold": False}
 
 
 def verify_annotations(review, manifest, groups, prefixes):
@@ -373,14 +420,36 @@ def run_phase(manifest, config, base, assets, budget, *, phase, review, root, wo
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--validate", type=Path, help="Manifest only; no native data, model or network access")
+    parser.add_argument("--candidate-frame", type=Path, help="Frozen source-only screening configuration; CPU Docker only")
+    parser.add_argument("--frame-source", type=Path)
+    parser.add_argument("--frame-output", type=Path)
     parser.add_argument("--preflight", action="store_true")
     parser.add_argument("--client", action="store_true")
     args = parser.parse_args()
     if args.validate:
+        require(not args.candidate_frame and not args.preflight and not args.client, "Select one command")
         print(fingerprint(load_manifest(args.validate)))
         return
     os.umask(0o077)
     require(os.getuid() != 0 and Path("/.dockerenv").exists(), "Non-root Docker required")
+    if args.candidate_frame:
+        require(not args.preflight and not args.client and args.frame_source and args.frame_output, "Explicit CPU frame inputs/output required")
+        require(os.environ.get("CUDA_VISIBLE_DEVICES") == "" and os.environ.get("NVIDIA_VISIBLE_DEVICES") == "void"
+                and not list(Path("/dev").glob("nvidia[0-9]*")) and
+                {path.name for path in Path("/sys/class/net").iterdir()} == {"lo"}, "Candidate screening requires CPU-only Docker with network=none")
+        require(not args.frame_output.exists(), "Candidate preparation is immutable; use a separately frozen new frame")
+        configuration = read_json(args.candidate_frame)
+        spec = configuration["eligibility_profile"]
+        profile_path = Path("/code") / spec["config_path"]
+        require(profile_path.resolve().is_relative_to(Path("/code")) and
+                file_hash(profile_path) == spec["config_sha256"], "Unpinned candidate eligibility profile")
+        profile = read_json(profile_path)
+        from .catalog import load_accommodations
+        catalog = load_accommodations("/database/accommodations/clean_accommodations_2022.csv", profile["task_policy"]["catalog_csv_sha256"])
+        result = prepare_candidate_frame(configuration, code=Path("/code"), source_path=args.frame_source,
+                                         catalog=catalog, actual_commit=os.environ["ADAPTER_COMMIT"])
+        atomic_json(args.frame_output, result)
+        return
     phase = os.environ["MAIN_PHASE"]
     require(phase in {"prepare", "prefixes", "continuations"}, "Unknown main phase")
     code, review, root, work = map(Path, ("/code", "/review", "/cycle", "/work"))
