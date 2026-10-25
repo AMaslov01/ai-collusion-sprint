@@ -267,6 +267,7 @@ def main():
         analysis_inputs.extend(prefix / "results" / (task["task_id"] + ".json") for task in group["tasks"][:2])
     report = {"schema": "main_cache_replay_v1", "status": "passed_cache_only" if not errors else "failed",
         "manifest_sha256": fingerprint(manifest), "inference_code_commit": manifest["pipeline"]["code_commit"],
+        "audit_code_sha256": sha256(Path(__file__).read_bytes()).hexdigest(),
         "new_model_calls": 0, "no_HTTP_client_constructed": True, "human_gold": False,
         "requests": len(requests), "calls_replayed": len(consumed), "accounted_tokens": total,
         "allocations": allocations, "checks": checks, "errors": errors,

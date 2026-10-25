@@ -4,6 +4,9 @@ import argparse
 from hashlib import sha256
 import os
 from pathlib import Path
+import sys
+
+sys.path.insert(0, "/code/src")
 
 from collusion_handoff.artifacts import atomic_json, fingerprint, read_json
 from collusion_handoff.main_analysis import analyze, verify_analysis_review_binding
@@ -24,6 +27,8 @@ def main():
     require(not args.output.exists() and root != args.output.resolve() and root not in args.output.resolve().parents,
             "Use a new immutable analysis outside the input run")
     manifest, config, _, _, _ = approved_pipeline(args.review, Path("/code"))
+    require(sha256(Path(__file__).read_bytes()).hexdigest() == manifest["analysis"]["analysis_code_sha256"],
+            "Executing analysis driver differs from the frozen analysis implementation")
     audit = read_json(args.cache_audit)
     require(audit["schema"] == "main_cache_replay_v1" and audit["status"] == "passed_cache_only"
             and audit["manifest_sha256"] == fingerprint(manifest) and audit["new_model_calls"] == 0,
