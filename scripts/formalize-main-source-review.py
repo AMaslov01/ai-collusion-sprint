@@ -91,9 +91,15 @@ def main():
         parser.add_argument("--" + name, type=Path, required=True)
     for name in ("draft-sha256", "manifest-sha256", "prepared-registry-sha256", "reviewer-key"):
         parser.add_argument("--" + name, required=True)
-    parser.add_argument("--execution-context", choices=["shared_gpu_worker_cpu_diagnostic"], required=True)
+    parser.add_argument("--execution-context", choices=["shared_gpu_worker_cpu_diagnostic", "isolated_cpu_diagnostic"], required=True)
     args = parser.parse_args()
     require(os.getuid() != 0 and Path("/.dockerenv").exists() and os.environ.get("CUDA_VISIBLE_DEVICES") == "", "Owned nonroot Docker with child CUDA mask required")
+    isolated = args.execution_context == "isolated_cpu_diagnostic"
+    if isolated:
+        require(os.environ.get("NVIDIA_VISIBLE_DEVICES") == "void" and
+                not list(Path("/dev").glob("nvidia[0-9]*")) and
+                {path.name for path in Path("/sys/class/net").iterdir()} == {"lo"},
+                "Isolated CPU formalization requires no GPU devices and network=none")
     require(not args.output.exists() and digest(args.draft) == args.draft_sha256, "New output and unchanged independent semantic seal required")
     require(re.fullmatch(r"[A-Za-z0-9_-]+", args.reviewer_key), "Invalid administrative reviewer key")
     draft, manifest = read(args.draft), read(args.manifest)
@@ -170,7 +176,7 @@ def main():
               "execution_context": {"kind": args.execution_context, "CUDA_child_mask": os.environ["CUDA_VISIBLE_DEVICES"],
                   "visible_GPU_devices": sorted(str(path) for path in Path("/dev").glob("nvidia[0-9]*")),
                   "visible_network_interfaces": sorted(path.name for path in Path("/sys/class/net").iterdir()),
-                  "GPU_isolation_claimed": False, "network_isolation_claimed": False}}
+                  "GPU_isolation_claimed": isolated, "network_isolation_claimed": isolated}}
     write(args.output / "batch-review.json", report)
     print(json.dumps({"status": report["status"], "reviewer_id": reviewer_id, "groups_verified": list(rows),
                       "errors": errors, "report_sha256": digest(args.output / "batch-review.json"), "new_model_calls": 0}))

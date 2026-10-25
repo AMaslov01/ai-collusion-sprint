@@ -18,7 +18,10 @@ from collusion_handoff.main_cycle import (
 )
 
 
-FORMALIZER_SHA = "f840ab8586ee1cf0b84abfc4be8f56efb655b203c41990a532ec77e19fdebfd2"
+FORMALIZER_SHAS = {
+    "f840ab8586ee1cf0b84abfc4be8f56efb655b203c41990a532ec77e19fdebfd2",
+    "2fa1666c99bd2f50e56ee1a85b05f76e8b173f382edecd01521070ede2c6fcf9",
+}
 REVIEWERS = {"Root": "Root", "Diagnostics": "Diagnostics/01a16da8-0275-76e0-8936-770c4df31616"}
 
 
@@ -49,7 +52,7 @@ def assemble(manifest, manifest_sha, prefixes, reports, inventory, output):
                 report["source_only_before_memory"] is True and report["independently_locked"] is True and
                 report["manifest_sha256"] == manifest_sha and report["status"] == "passed" and
                 report["errors"] == [] and report["new_model_calls"] == 0 and
-                report["semantic_labels_changed"] is False and report["formalizer_sha256"] == FORMALIZER_SHA,
+                report["semantic_labels_changed"] is False and report["formalizer_sha256"] in FORMALIZER_SHAS,
                 "Unverified or semantically changed formalization receipt")
         for number, original in report["groups"].items():
             require(number in assigned and number not in rows[key], "Duplicate or unassigned reviewer row")
