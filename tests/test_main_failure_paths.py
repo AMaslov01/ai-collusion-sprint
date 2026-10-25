@@ -9,9 +9,8 @@ from unittest.mock import patch
 
 from collusion_handoff.abe_cycle import namespace
 from collusion_handoff.abe_runner import ServiceFailure
-from collusion_handoff.artifacts import append_event, atomic_json, read_json
+from collusion_handoff.artifacts import append_event, atomic_json, fingerprint, read_json
 from collusion_handoff.main_cycle import initialize_phase_assignments, finalize_phase_assignments, continuation_group
-from collusion_handoff.artifacts import fingerprint
 from collusion_handoff import main_cycle
 import test_main_cycle as synthetic_main
 
@@ -39,7 +38,11 @@ class MainFailurePathTests(unittest.TestCase):
             (locations["/cycle"] / "ledger/requests.jsonl").write_bytes(b"")
 
             def path(value):
-                return locations.get(str(value), Path(value))
+                original = Path(value)
+                for prefix, replacement in locations.items():
+                    if original.is_relative_to(prefix):
+                        return replacement / original.relative_to(prefix)
+                return original
 
             with patch.object(main_cycle, "Path", side_effect=path), \
                  patch.object(main_cycle, "approved_pipeline", return_value=(manifest, config, {}, {}, {})), \
