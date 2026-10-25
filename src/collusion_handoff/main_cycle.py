@@ -15,6 +15,7 @@ import traceback
 
 from .artifacts import atomic_json, fingerprint, read_json
 from .main_manifest import HUMAN_ID, SHA, ManifestError, load_manifest, verify_approval
+from .task_failure_evidence import failure_accounting, unknown_task_result
 
 
 ARMS = ("F", "S", "C", "CV", "CVP", "R")
@@ -82,11 +83,57 @@ def assigned_opportunities(manifest, groups):
             for index in sample["future_task_indices"]]
 
 
+def initialize_phase_assignments(manifest, groups, work, phase):
+    assigned = assigned_opportunities(manifest, groups)
+    atomic_json(work / "assigned-future-opportunities.json", assigned)
+    atomic_json(work / "all-assigned-results.json", {"assigned": len(assigned), "measurement_status": "pending_client_finalization",
+        "observed": [{**row, "result": {"task_id": row["task_id"], "status": "assigned_not_run", "model_calls": 0,
+                     "evaluation": {"H": None, "U": None, "Q": None}}} for row in assigned]})
+    if phase == "prefixes":
+        prefix = [{"group_id": number, "traveler_index": index, "task_id": groups[number]["tasks"][index - 1]["task_id"]}
+                  for number in manifest["sample"]["group_ids"] for index in (1, 2)]
+        atomic_json(work / "assigned-prefix-opportunities.json", prefix)
+    return assigned
+
+
+def finalize_phase_assignments(config, root, work, phase, reason):
+    """Read durable per-task results; an interrupted/unreadable measurement stays unknown."""
+    from .abe_cycle import namespace
+    requests, accounting_error = failure_accounting(root)
+    names = [("assigned-future-opportunities.json", "all-assigned-results.json", False)]
+    if phase == "prefixes":
+        names.append(("assigned-prefix-opportunities.json", "prefix-assigned-results.json", True))
+    for assigned_name, report_name, prefix in names:
+        report = []
+        for item in read_json(work / assigned_name):
+            number = item["group_id"]
+            branch = namespace(config["run_id"], number, "prefix" if prefix else "recipient/" + item["arm"])
+            job = work / (f"prefix/group-{number}" if prefix else f"continuations/group-{number}/{branch}")
+            path = job / "results" / (item["task_id"] + ".json")
+            if path.exists():
+                try:
+                    result = read_json(path)
+                except Exception:
+                    result = unknown_task_result(item["task_id"], branch, None, reason, traceback.format_exc())
+            else:
+                result = unknown_task_result(item["task_id"], branch, requests, reason, accounting_error)
+                if phase == "prefixes" and not prefix and reason is None:
+                    result["status"] = "assigned_waiting_for_continuation_phase"
+                    result["reason"] = "Prefix collection finished; the dependent phase has not begun"
+                if phase != "prefixes" or prefix:
+                    atomic_json(path, result)
+            report.append({**item, "result": result})
+        atomic_json(work / report_name, {"assigned": len(report), "observed": report,
+                    "failure": reason, "accounting_error": accounting_error,
+                    "measurement_status": "finalized_with_explicit_statuses"})
+    return accounting_error
+
+
 def approved_pipeline(review, code):
     """Check the approval first; reading this function cannot read native data."""
     review, code = Path(review), Path(code)
     manifest = load_manifest(review / "main-manifest.json")
-    authority = verify_approval(manifest, read_json(review / "human-main-approval.json"),
+    authority = verify_approval(manifest, read_json(review / authority_receipt_name(manifest)),
                                 read_json(review / "main-readiness.json"))
     pipeline = manifest["pipeline"]
     require(os.environ.get("ADAPTER_COMMIT") == pipeline["code_commit"], "Main checkout differs from approval")
@@ -167,19 +214,47 @@ def _prepare_selected_groups(selected_ids, config, source_path, catalog, expecte
 
 def prepare_registry(manifest, config, source_path, catalog):
     """Source-only eligibility, preserving all assigned IDs without replacement."""
-    return _prepare_selected_groups(manifest["sample"]["group_ids"], config, source_path, catalog,
-                                    config["main_data_source"]["sha256"])
+    groups, flow = _prepare_selected_groups(manifest["sample"]["group_ids"], config, source_path, catalog,
+                                           config["main_data_source"]["sha256"])
+    units = source_unit_metadata(groups, manifest["sample"]["group_ids"])
+    flow["source_unit_metadata"] = units
+    if config.get("source_unit_policy") == "exact_base_query_and_provided_base_plan_first_in_frame":
+        require(not units["exact_duplicate_groups"] and not any(row["source_unit_sha256"] in
+                config.get("dev_source_unit_sha256", []) for row in units["per_group"]),
+                "Frozen main IDs contain duplicate or DEV-exposed source units; never replace assigned groups")
+    return groups, flow
+
+
+def source_unit_metadata(groups, ordered_ids):
+    rows, by_unit = [], {}
+    for number in ordered_ids:
+        if number not in groups:
+            continue
+        base = groups[number]["base_person"]
+        values = {"original_base_query_utf8_sha256": sha256(base["query"].encode("utf-8")).hexdigest(),
+                  "provided_base_plan_sha256": fingerprint({"base_name": base["name"], "daily_plans": base["daily_plans"]})}
+        unit = fingerprint(values)
+        by_unit.setdefault(unit, []).append(number)
+        rows.append({"group_id": number, **values, "source_unit_sha256": unit, "canonical_group_id": by_unit[unit][0]})
+    return {"definition": "Exact full original base-query UTF8 bytes plus canonical full provided base plan {base_name,daily_plans}; no text normalization",
+            "per_group": rows, "exact_duplicate_groups": [ids for ids in by_unit.values() if len(ids) > 1],
+            "canonical_order": "First in the prospectively fixed source frame", "model_outputs_used": False}
 
 
 def _candidate_profile(configuration, code, actual_commit):
     required = {"schema", "code_commit", "code_file_sha256", "science_freeze_sha256", "source_sha256", "eligibility_profile",
                 "ordered_group_ids", "dev_exposure_group_ids", "order_policy", "replacement_policy"}
-    require(set(configuration) == required and configuration["schema"] == "main_candidate_frame_configuration_v1",
+    require(required <= set(configuration) <= required | {"source_unit_policy", "dev_source_unit_sha256"} and
+            configuration["schema"] == "main_candidate_frame_configuration_v1",
             "Explicit frozen candidate-frame configuration required")
     require(configuration["code_commit"] == actual_commit and len(actual_commit) == 40 and
             all(c in "0123456789abcdef" for c in actual_commit), "Candidate code freeze differs")
     require(configuration["order_policy"] == "explicit_order_before_source_screening" and
             configuration["replacement_policy"] == "no_replacement", "Candidate order/replacement rule changed")
+    require(configuration.get("source_unit_policy", "metadata_only") in {"metadata_only", "exact_base_query_and_provided_base_plan_first_in_frame"} and
+            isinstance(configuration.get("dev_source_unit_sha256", []), list) and
+            all(isinstance(value, str) and SHA.fullmatch(value) for value in configuration.get("dev_source_unit_sha256", [])),
+            "Unknown prospective source-unit policy or DEV-unit hashes")
     ids, exposed = configuration["ordered_group_ids"], configuration["dev_exposure_group_ids"]
     require(isinstance(ids, list) and ids and all(type(number) is int and number >= 0 for number in ids)
             and len(ids) == len(set(ids)), "Explicit unique ordered screening frame required")
@@ -211,16 +286,112 @@ def prepare_candidate_frame(configuration, *, code, source_path, catalog, actual
     profile = _candidate_profile(configuration, code, actual_commit)
     ids = configuration["ordered_group_ids"]
     groups, flow = _prepare_selected_groups(ids, profile, source_path, catalog, configuration["source_sha256"])
+    units = source_unit_metadata(groups, ids)
+    policy = configuration.get("source_unit_policy", "metadata_only")
+    if policy == "exact_base_query_and_provided_base_plan_first_in_frame":
+        exposure = set(configuration.get("dev_source_unit_sha256", []))
+        for row in units["per_group"]:
+            if row["canonical_group_id"] != row["group_id"] or row["source_unit_sha256"] in exposure:
+                groups.pop(row["group_id"])
+                status = next(item for item in flow["groups"] if item["group_id"] == row["group_id"])
+                status.update(status="ineligible_dev_source_unit_exposure" if row["source_unit_sha256"] in exposure else
+                              "ineligible_exact_duplicate_source_unit", canonical_group_id=row["canonical_group_id"])
     return {"schema": "main_candidate_frame_preparation_v1", "configuration_sha256": fingerprint(configuration),
             "code_commit": actual_commit, "science_freeze_sha256": configuration["science_freeze_sha256"],
             "source_sha256": configuration["source_sha256"], "flow": flow, "private_groups": groups,
+            "source_unit_policy": policy, "source_unit_metadata": units,
             "registry_sha256": registry_digest(groups), "eligible_ids_in_frame_order": [number for number in ids if number in groups],
             "main_sample_chosen": False, "main_manifest_created": False, "prefixes_collected": 0,
             "new_model_calls": 0, "human_gold": False}
 
 
+def authority_receipt_name(manifest):
+    return "delegated-main-execution.json" if manifest.get("gates", {}).get("authorization_mode") == "delegated_autonomous_after_diagnostics" else "human-main-approval.json"
+
+
+def annotation_receipt_name(manifest):
+    return "ai-source-annotations.json" if manifest.get("gates", {}).get("source_annotation_timing") == "independent_AI_source_first_human_audit_before_claims" else "human-source-annotations.json"
+
+
+def checked_review_file(review, filename, digest):
+    path = Path(review) / filename
+    require(path.resolve().is_relative_to(Path(review).resolve()) and file_hash(path) == digest,
+            "Source-only review/reference file changed or escaped its mount")
+    return read_json(path)
+
+
+def verify_generated_review_spans(label, source):
+    events = {event["event_id"]: event for event in source["archive"]["events"]}
+    roles = set()
+    for span in label["evidence"]:
+        event = events[span["event_id"]]
+        raw = event["content"].encode("utf-8")
+        require(type(span["start"]) is int and type(span["end"]) is int and
+                0 <= span["start"] < span["end"] <= len(raw) and
+                raw[span["start"]:span["end"]] == span["quote"].encode("utf-8") and
+                event["event_type"] in {"assistant_action", "peer_message"},
+                "Source review needs exact actual generated speech spans")
+        roles.add(event["role"])
+    require(label["formation_status"] != "confirmed" or {"A", "B"} <= roles,
+            "Confirmed reciprocal agreement requires both generated speakers")
+
+
+def verify_ai_annotations(review, manifest, groups, prefixes):
+    """Permit authorized overnight collection with explicit, independently locked AI labels."""
+    receipt = read_json(Path(review) / annotation_receipt_name(manifest))
+    require(receipt["schema"] == "independent_AI_main_source_annotations_v1" and receipt["role"] == "assistant" and
+            receipt["human_gold"] is False and receipt["source_only_before_memory"] is True,
+            "Independent source-only AI collection receipt required; it cannot assert human gold")
+    require(receipt["manifest_sha256"] == fingerprint(manifest) and receipt["registry_sha256"] == registry_digest(groups),
+            "AI collection review belongs to another frozen packet")
+    ids = {str(number) for number in groups}
+    require(set(receipt["groups"]) == ids and len(receipt["reviewers"]) >= 2 and
+            len({row["reviewer_id"] for row in receipt["reviewers"]}) == len(receipt["reviewers"]),
+            "All assigned sources and at least two distinct independent reviewers are required")
+    reviews = []
+    for spec in receipt["reviewers"]:
+        item = checked_review_file(review, spec["review_file"], spec["review_sha256"])
+        require(item["schema"] == "independent_AI_main_source_review_v1" and item["role"] == "assistant" and
+                item["reviewer_id"] == spec["reviewer_id"] and item["human_gold"] is False and
+                item["source_only_before_memory"] is True and item["independently_locked"] is True and
+                item["manifest_sha256"] == fingerprint(manifest) and item["registry_sha256"] == registry_digest(groups) and
+                set(item["groups"]) == ids, "Independent complete source-only review lock is missing")
+        reviews.append(item)
+    for number, group in groups.items():
+        row = receipt["groups"][str(number)]
+        source_path = prefixes / f"prefix/group-{number}/source.json"
+        source_sha = file_hash(source_path)
+        source = read_json(source_path)
+        mapping_sha = fingerprint([task["memory"] for task in group["tasks"][2:]])
+        labels, checkpoints = [], []
+        for item in [row, *(value["groups"][str(number)] for value in reviews)]:
+            require(item["source_file_sha256"] == source_sha and item["Q_mapping_sha256"] == mapping_sha and
+                    item["formation_review_complete"] is True and item["whole_source_reviewed"] is True,
+                    "Source archive or prospective Q binding differs from its locked review")
+            binding = checked_review_file(review, item["reference_file"], item["reference_sha256"])
+            require(binding["source_file_sha256"] == source_sha and binding["memory_outputs_opened"] is False,
+                    "Source reference was not locked before memory")
+            require(item["formation_status"] in {"confirmed", "absent", "uncertain"} and
+                    item["checkpoint_status"] in {"active", "revoked", "absent", "uncertain"} and
+                    (item["formation_status"] != "confirmed" or item["checkpoint_status"] == "active"),
+                    "Formation review must preserve checkpoint revocation and uncertainty")
+            if item is not row:
+                verify_generated_review_spans(item, source)
+            labels.append(item["formation_status"])
+            checkpoints.append(item["checkpoint_status"])
+        expected_label = labels[1] if len(set(labels[1:])) == 1 else "uncertain"
+        expected_checkpoint = checkpoints[1] if len(set(checkpoints[1:])) == 1 else "uncertain"
+        require(labels[0] == expected_label and checkpoints[0] == expected_checkpoint,
+                "Unresolved source-review disagreement cannot become a confirmed coalition")
+        require(row["harmful_future_agreement_present"] is (True if expected_label == "confirmed" else
+                False if expected_label == "absent" else None), "AI coalition mask must retain uncertainty")
+    return receipt
+
+
 def verify_annotations(review, manifest, groups, prefixes):
     """Verify supplied human attestations, never manufacture human gold."""
+    if annotation_receipt_name(manifest) == "ai-source-annotations.json":
+        return verify_ai_annotations(review, manifest, groups, prefixes)
     receipt = read_json(Path(review) / "human-source-annotations.json")
     require(receipt["schema"] == "human_main_source_annotations_v1" and receipt["role"] == "user" and
             receipt["message_verified_from_app"] is True and receipt["source_only_before_memory"] is True,
@@ -303,6 +474,7 @@ def continuation_group(prefix_job, packages, manifest, config, base, budget, wor
         failure = traceback.format_exc()
         raise
     finally:
+        requests, accounting_error = failure_accounting(getattr(budget, "root", None))
         for row in assigned:
             arm = row["arm"]
             job = destination / mapping[arm]
@@ -310,11 +482,12 @@ def continuation_group(prefix_job, packages, manifest, config, base, budget, wor
             if result_path.exists():
                 row["status"] = read_json(result_path)["status"]
             else:
-                task = next(task for task in tasks if task["task_id"] == row["task_id"])
-                row["status"] = "not_run_after_phase_failure" if failure else "not_run_missing_assigned_memory"
-                events = runners[arm].protocol.events if arm in runners else []
-                atomic_json(result_path, {"task_id": row["task_id"], "status": row["status"], "reason": failure,
-                            "model_calls": 0, "evaluation": evaluate_opportunity(task, catalog, events, ledger_complete=True)})
+                result = unknown_task_result(row["task_id"], mapping[arm], requests,
+                    failure or "Assigned task has no durable terminal result", accounting_error)
+                if not failure and arm not in runners:
+                    result["status"] = "not_run_missing_assigned_memory"
+                row["status"] = result["status"]
+                atomic_json(result_path, result)
         for arm, runner in runners.items():
             job = destination / mapping[arm]
             atomic_json(job / "actual-requests.json", runner.requests)
@@ -326,7 +499,7 @@ def continuation_group(prefix_job, packages, manifest, config, base, budget, wor
                 require(all(origin["event_type"] != "private_goal_input" and
                             origin["message_sha256"] == fingerprint(request["payload"]["messages"][origin["message_index"]])
                             for origin in request["message_provenance"]), "Private-goal origin or wire-provenance mismatch")
-        atomic_json(destination / "status.json", {"opportunities": assigned, "failure": failure,
+        atomic_json(destination / "status.json", {"opportunities": assigned, "failure": failure, "accounting_error": accounting_error,
                     "status": "stopped_with_assigned_statuses" if failure else "finished_with_explicit_statuses"})
     return destination
 
@@ -392,13 +565,22 @@ def preflight(manifest, config, base, assets, phase, *, code, review, root, work
                "manifest_sha256": fingerprint(manifest), "registry_sha256": registry_digest(groups), "new_model_calls": 0,
                "code_commit": manifest["pipeline"]["code_commit"],
                "review_files_sha256": {name: file_hash(review / name) for name in
-                                       ("main-manifest.json", "human-main-approval.json", "main-readiness.json")},
+                                       ("main-manifest.json", authority_receipt_name(manifest), "main-readiness.json")},
                "files": {path.name: file_hash(path) for path in work.glob("*.json")}}
     if phase != "prepare":
         receipt["prepared_files_sha256"] = {name: file_hash(root / "cpu-prepare" / name) for name in
                                            ("private-task-registry.json", "assigned-future-opportunities.json", "preflight.json")}
     if phase == "continuations":
-        receipt["review_files_sha256"]["human-source-annotations.json"] = file_hash(review / "human-source-annotations.json")
+        name = annotation_receipt_name(manifest)
+        receipt["review_files_sha256"][name] = file_hash(review / name)
+        if name == "ai-source-annotations.json":
+            annotations = read_json(review / name)
+            for spec in annotations["reviewers"]:
+                receipt["review_files_sha256"][spec["review_file"]] = spec["review_sha256"]
+                for row in read_json(review / spec["review_file"])["groups"].values():
+                    receipt["review_files_sha256"][row["reference_file"]] = row["reference_sha256"]
+            for row in annotations["groups"].values():
+                receipt["review_files_sha256"][row["reference_file"]] = row["reference_sha256"]
         receipt["historical_prefix_bundle"] = prefix_bundle(root / "prefixes", manifest["sample"]["group_ids"])
     atomic_json(work / "preflight.json", receipt)
 
@@ -410,7 +592,7 @@ def run_phase(manifest, config, base, assets, budget, *, phase, review, root, wo
     groups = {int(key): value for key, value in read_json(root / "cpu-prepare/private-task-registry.json")["groups"].items()}
     assigned = read_json(root / "cpu-prepare/assigned-future-opportunities.json")
     require(assigned == assigned_opportunities(manifest, groups), "Frozen main denominator changed")
-    atomic_json(work / "assigned-future-opportunities.json", assigned)
+    initialize_phase_assignments(manifest, groups, work, phase)
     failure = None
     try:
         if phase == "prefixes":
@@ -435,27 +617,16 @@ def run_phase(manifest, config, base, assets, budget, *, phase, review, root, wo
         failure = traceback.format_exc()
         raise
     finally:
-        if phase == "continuations":
-            from .abe_cycle import namespace
-            from .abe_evaluation import evaluate_opportunity
-            report = []
-            for item in assigned:
-                number, arm = item["group_id"], item["arm"]
-                task = next(task for task in groups[number]["tasks"] if task["task_id"] == item["task_id"])
-                path = work / f"continuations/group-{number}" / namespace(config["run_id"], number, "recipient/" + arm) / "results" / (task["task_id"] + ".json")
-                if path.exists():
-                    try:
-                        result = read_json(path)
-                    except ValueError:
-                        result = {"status": "measurement_corruption", "evaluation": {"H": None, "U": None, "Q": None}}
-                else:
-                    result = {"status": "not_run_after_phase_failure", "reason": failure, "model_calls": 0,
-                              "evaluation": evaluate_opportunity(task, catalog, [], ledger_complete=True)}
-                    atomic_json(path, result)
-                report.append({**item, "result": result})
-            atomic_json(work / "all-assigned-results.json", {"assigned": len(assigned), "observed": report})
-        atomic_json(work / "phase-status.json", {"phase": phase, "status": "failed" if failure else "finished_with_explicit_statuses",
-                    "failure": failure, "global_budget": budget.state(), "main_started": True})
+        accounting_error = finalize_phase_assignments(config, root, work, phase, failure)
+        try:
+            state = budget.state()
+        except Exception:
+            state = {"status": "accounting_failure", "error": traceback.format_exc()}
+            accounting_error = accounting_error or state["error"]
+        atomic_json(work / "phase-status.json", {"phase": phase, "status": "failed" if failure or accounting_error else "finished_with_explicit_statuses",
+                    "failure": failure, "accounting_error": accounting_error, "global_budget": state, "main_started": True})
+        if accounting_error and not failure:
+            require(False, "Main accounting failed; see preserved phase-status.json")
 
 
 def main():
@@ -500,7 +671,7 @@ def main():
     require(registry_digest(read_json(root / "cpu-prepare/private-task-registry.json")["groups"]) == pre["registry_sha256"],
             "Prepared main registry differs from the CPU preflight")
     for name, digest in pre["review_files_sha256"].items():
-        require(Path(name).name == name and file_hash(review / name) == digest, "Main approval packet changed after CPU review")
+        require((review / name).resolve().is_relative_to(review.resolve()) and file_hash(review / name) == digest, "Main review packet changed after CPU review")
     for name, digest in pre["prepared_files_sha256"].items():
         require(Path(name).name == name and file_hash(root / "cpu-prepare" / name) == digest,
                 "Prepared main artifact changed after CPU review")
@@ -517,17 +688,29 @@ def main():
                 "Historical B/world/source inputs changed after main CPU review")
         groups = {number: read_json(root / f"prefixes/prefix/group-{number}/private-registry-bound.json") for number in manifest["sample"]["group_ids"]}
         verify_annotations(review, manifest, groups, root / "prefixes")
+    groups = {int(key): value for key, value in read_json(root / "cpu-prepare/private-task-registry.json")["groups"].items()}
+    initialize_phase_assignments(manifest, groups, work, phase)
     if args.client:
         import httpx
         from .cycle_budget import CycleBudget
-        with httpx.Client(trust_env=False, follow_redirects=False, transport=httpx.HTTPTransport(retries=0)) as http:
-            return run_phase(manifest, config, base, assets, CycleBudget(root, config, http, phase_work=work),
-                             phase=phase, review=review, root=root, work=work)
+        try:
+            with httpx.Client(trust_env=False, follow_redirects=False, transport=httpx.HTTPTransport(retries=0)) as http:
+                return run_phase(manifest, config, base, assets, CycleBudget(root, config, http, phase_work=work),
+                                 phase=phase, review=review, root=root, work=work)
+        except BaseException:
+            finalize_phase_assignments(config, root, work, phase, traceback.format_exc())
+            raise
     from . import smoke
     atomic_json(work / "phase-manifest.json", {"phase": phase, "manifest_sha256": fingerprint(manifest),
                 "authority": authority, "CPU_preflight_sha256": file_hash("/preflight/preflight.json"), "main_started": True})
-    smoke.supervise(base, float(os.environ["PACKAGE_DEADLINE_UNIX"]), client_module="collusion_handoff.main_cycle",
-                    alias="qwen-native-dev", scope="approved_main_only", server_extra_args=("--structured-outputs-config.backend", "xgrammar"))
+    try:
+        smoke.supervise(base, float(os.environ["PACKAGE_DEADLINE_UNIX"]), client_module="collusion_handoff.main_cycle",
+                        alias="qwen-native-dev", scope="authorized_main_only", server_extra_args=("--structured-outputs-config.backend", "xgrammar"))
+    except BaseException:
+        failure = traceback.format_exc()
+        accounting_error = finalize_phase_assignments(config, root, work, phase, failure)
+        atomic_json(work / "supervisor-failure.json", {"failure": failure, "accounting_error": accounting_error, "main_started": True})
+        raise
 
 
 if __name__ == "__main__":

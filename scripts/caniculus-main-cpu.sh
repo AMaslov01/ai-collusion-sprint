@@ -42,12 +42,17 @@ done
 case "$CAN_DATA" in "$CAN_PROJECT/inputs/"*) ;; *) exit 2;; esac
 test ! -e "$CAN_PROJECT/bootstrap/control/STOP"
 # A main preflight must not expand the agreed CPU/RAM allowance during DEV.
-test -z "$(docker ps --filter label=owner=a.maslov --filter label=computation=gpu --format '{{.Names}}')"
+for CAN_ACTIVE in $(docker ps --filter label=owner=a.maslov --format '{{.Names}}'); do
+ case "$CAN_ACTIVE" in a-maslov-ai-collusion*) exit 1;; esac
+done
 mkdir -p "$CAN_ROOT"
 test "$(realpath "$CAN_ROOT")" = "$CAN_ROOT"
 test "$(stat -c %u "$CAN_ROOT")" = "$(id -u)"
 exec 9>"$CAN_ROOT/launch.lock"
 flock -n 9
+for CAN_ACTIVE in $(docker ps --filter label=owner=a.maslov --format '{{.Names}}'); do
+ case "$CAN_ACTIVE" in a-maslov-ai-collusion*) exit 1;; esac
+done
 CAN_CPU=$(jq -r .hardware.cpu_limit "$CAN_MANIFEST")
 CAN_RAM=$(jq -r .hardware.RAM_limit_GiB "$CAN_MANIFEST")
 CAN_SHM=$(jq -r .hardware.shm_GiB "$CAN_MANIFEST")
@@ -56,6 +61,8 @@ CAN_PIDS=$(jq -r .operations.pids_limit "$CAN_CONFIG")
 test "$CAN_RAM" -le 64
 test "$CAN_SHM" -le "$CAN_RAM"
 test "$CAN_PIDS" = 1024
+test "$(nproc)" -ge "$CAN_CPU"
+test "$(awk '$1=="MemAvailable:" {print $2}' /proc/meminfo)" -ge "$((CAN_RAM*1024*1024))"
 CAN_IMAGE=$(cat "$CAN_PROJECT/bootstrap/environment/image-id.txt")
 CAN_DIGEST=$(jq -r .pipeline.image_digest "$CAN_MANIFEST")
 docker image inspect "$CAN_IMAGE" --format '{{json .RepoDigests}}' | jq -e --arg digest "$CAN_DIGEST" 'any(.[]; endswith("@"+$digest))' >/dev/null
@@ -72,7 +79,8 @@ if [ "$CAN_MODE" = gpu ]; then
  test "$(jq -r .code_commit "$CAN_RECEIPT")" = "$CAN_SHA"
  test "$(jq -r .phase "$CAN_RECEIPT")" = "$CAN_PHASE"
  while IFS=$'\t' read -r CAN_FILE CAN_HASH; do
-  test "$(basename "$CAN_FILE")" = "$CAN_FILE"
+  test "$(realpath "$CAN_REVIEW/$CAN_FILE")" != "$CAN_REVIEW"
+  case "$(realpath "$CAN_REVIEW/$CAN_FILE")" in "$CAN_REVIEW/"*) ;; *) exit 2;; esac
   test "$(sha256sum "$CAN_REVIEW/$CAN_FILE" | cut -d ' ' -f1)" = "$CAN_HASH"
  done < <(jq -r '.review_files_sha256|to_entries[]|[.key,.value]|@tsv' "$CAN_RECEIPT")
  test "$(jq -r '.hardware.tensor_parallel_size' "$CAN_MANIFEST")" = 1
@@ -170,5 +178,6 @@ if [ "$CAN_MODE" = gpu ]; then
  printf '%s\n' "$CAN_CONTAINER_ID" > "$CAN_WORK/created-container-id.txt"
  sync -d "$CAN_ROOT/gpu-phase-names.txt" "$CAN_WORK/created-container-id.txt"
 fi
+test "$(date +%s)" -lt "$CAN_END"
 docker start "$CAN_CONTAINER_ID"
 docker inspect "$CAN_NAME" > "$CAN_WORK/docker-inspect.json"

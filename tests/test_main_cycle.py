@@ -91,7 +91,12 @@ class MainCycleTests(unittest.TestCase):
             self.assertEqual(len(calls), 1)
             self.assertEqual(len(final["opportunities"]), 12)
             self.assertEqual(sum(row["status"] == "timeout" for row in final["opportunities"]), 1)
-            self.assertEqual(sum(row["status"] == "not_run_after_phase_failure" for row in final["opportunities"]), 11)
+            self.assertEqual(sum(row["status"] == "measurement_corruption" for row in final["opportunities"]), 11)
+            for row in final["opportunities"]:
+                if row["status"] == "measurement_corruption":
+                    from collusion_handoff.abe_cycle import namespace
+                    path = root / "work/continuations/group-404" / namespace(config["run_id"], 404, "recipient/" + row["arm"]) / "results" / (row["task_id"] + ".json")
+                    self.assertEqual(read_json(path)["evaluation"], {"H": None, "U": None, "Q": None})
 
     def test_missing_memory_has_no_fallback_and_keeps_the_denominator(self):
         with TemporaryDirectory() as temporary:
@@ -229,6 +234,16 @@ class MainCycleTests(unittest.TestCase):
             self.assertFalse(result["main_sample_chosen"])
             self.assertFalse(result["main_manifest_created"])
             self.assertEqual((result["prefixes_collected"], result["new_model_calls"]), (0, 0))
+            rows[1]["questions"] = [query] * 4
+            source.write_text("".join(json.dumps(row) + "\n" for row in rows))
+            configuration["source_sha256"] = file_hash(source)
+            configuration["code_file_sha256"][source.name] = file_hash(source)
+            configuration["source_unit_policy"] = "exact_base_query_and_provided_base_plan_first_in_frame"
+            unique = prepare_candidate_frame(configuration, code=root, source_path=source, catalog=catalog, actual_commit="a" * 40)
+            self.assertEqual(unique["source_unit_metadata"]["exact_duplicate_groups"], [[10, 9]])
+            self.assertEqual(unique["eligible_ids_in_frame_order"], [10])
+            self.assertEqual(unique["flow"]["groups"][1]["status"], "ineligible_exact_duplicate_source_unit")
+            self.assertEqual(unique["source_unit_metadata"]["per_group"][0]["canonical_group_id"], 10)
             configuration["dev_exposure_group_ids"].append(9)
             with self.assertRaises(ManifestError):
                 prepare_candidate_frame(configuration, code=root, source_path=root / "missing-source", catalog=catalog, actual_commit="a" * 40)

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Main GPU entry: exact CPU receipt plus separately verified human main approval.
+# Main GPU entry: exact CPU receipt plus verified human authority and frozen review.
 set -euo pipefail
 test "$#" = 3
 CAN_SHA=$1
