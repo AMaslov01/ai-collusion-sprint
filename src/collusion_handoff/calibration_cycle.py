@@ -130,6 +130,14 @@ def settings():
     require(file_sha(CODE / amendment["formation"]["rubric_file"]) == amendment["formation"]["rubric_sha256"], "Source formation rubric changed")
     effective = deepcopy(profile)
     effective["run_id"] = amendment["run_id"]
+    hardware = amendment["runtime_hardware_override"]
+    require(set(hardware["operations"]) == {"gpu_uuid", "gpu_name", "gpu_index_at_inspection", "reservation_origin"} and
+            hardware["operations"]["gpu_name"] in {"NVIDIA L40", "NVIDIA L40S"} and
+            hardware["resource_authority"]["human_message_id"] == "01a17065-1088-7932-b7d1-cfa4460ab336" and
+            file_sha(CODE / hardware["resource_authority"]["verification_evidence_file"]) ==
+            hardware["resource_authority"]["verification_evidence_sha256"], "Unreviewed compatible-device rebind")
+    effective["operations"].update(hardware["operations"])
+    effective["resource_authority"] = hardware["resource_authority"]
     effective["protocol"].update(amendment["protocol_overrides"])
     require(effective["protocol"]["private_goal_message_role"] == "system" and
             effective["protocol"]["private_goal_serialization"] == "append_to_initial_system" and
@@ -155,7 +163,7 @@ def phase_identity(amendment, effective, base, assets):
             "child_limits": amendment["child_limits"], "charges": amendment["charges"],
             "actor_sampler": base["generation"], "builder_sampler": effective["memory"]["generation"],
             "model": base["model"], "image_digest": base["runtime"]["image_digest"],
-            "operations": effective["operations"], "authority": amendment["authority"],
+            "operations": effective["operations"], "runtime_hardware_override": amendment["runtime_hardware_override"], "authority": amendment["authority"],
             "resource_authority": effective["resource_authority"], "protocol": effective["protocol"], "main_started": False}
 
 
@@ -410,6 +418,19 @@ def verify_dispatch(identity, amendment):
     return pre, receipt
 
 
+def verify_sm89_runtime(amendment):
+    resolved = read_json(WORK / "resolved-engine.json")
+    log = (WORK / "server.log").read_text()
+    kernel = "Selected MarlinFP8ScaledMMLinearKernel for Fp8LinearMethod"
+    require(resolved["model_dtype"] == resolved["kv_tensor_dtype"] == "torch.bfloat16" and
+            resolved["kv_cache_dtype_setting"] == "auto" and kernel in log,
+            "Compatible GPU startup changed the frozen Marlin/BF16 numerical mode; stop before actor calls")
+    atomic_json(WORK / "hardware-stratum-runtime.json", {"hardware": amendment["runtime_hardware_override"],
+        "resolved": resolved, "selected_linear_kernel": "MarlinFP8ScaledMMLinearKernel",
+        "resolved_engine_sha256": file_sha(WORK / "resolved-engine.json"), "server_log_sha256_at_admission": file_sha(WORK / "server.log"),
+        "model_calls_before_runtime_check": 0})
+
+
 def run_client(amendment, effective, base, assets, closure, pre):
     import httpx
     from .abe_cycle import prefix_group, continue_group, namespace
@@ -419,6 +440,7 @@ def run_client(amendment, effective, base, assets, closure, pre):
     identity = phase_identity(amendment, effective, base, assets)
     phase, child = identity["phase"], ROOT / amendment["run_id"]
     initialize_assigned_outputs(pre, WORK, prefix=phase == amendment["phases"]["prefix"])
+    verify_sm89_runtime(amendment)
     if phase == amendment["phases"]["handoff"]:
         number = pre["handoff_world"]
         group = read_json(Path("/preflight/selected-task-registry.json"))["groups"][str(number)]

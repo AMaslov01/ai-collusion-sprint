@@ -68,9 +68,9 @@ if [ "$CAN_MODE" = gpu ]; then
  test "$(sha256sum "$CAN_CONFIG" | cut -d ' ' -f1)" = "$(jq -r .config_sha256 "$CAN_DISPATCH")"
  test "$(sha256sum "$CAN_PREFLIGHT/preflight.json" | cut -d ' ' -f1)" = "$(jq -r .preflight_sha256 "$CAN_DISPATCH")"
  test "$(jq -r .human_message_id "$CAN_DISPATCH")" = "$(jq -r .authority.human_message_id "$CAN_CONFIG")"
- test "$(jq -r .resource_authority_message_id "$CAN_DISPATCH")" = "$(jq -r .resource_authority.human_message_id "$CAN_PROFILE")"
- CAN_UUID=$(jq -r .operations.gpu_uuid "$CAN_PROFILE")
- test "$(nvidia-smi --id="$CAN_UUID" --query-gpu=name --format=csv,noheader)" = "$(jq -r .operations.gpu_name "$CAN_PROFILE")"
+ test "$(jq -r .resource_authority_message_id "$CAN_DISPATCH")" = "$(jq -r .runtime_hardware_override.resource_authority.human_message_id "$CAN_CONFIG")"
+ CAN_UUID=$(jq -r .runtime_hardware_override.operations.gpu_uuid "$CAN_CONFIG")
+ test "$(nvidia-smi --id="$CAN_UUID" --query-gpu=name --format=csv,noheader)" = "$(jq -r .runtime_hardware_override.operations.gpu_name "$CAN_CONFIG")"
  test -z "$(nvidia-smi --id="$CAN_UUID" --query-compute-apps=pid --format=csv,noheader)"
  test -z "$(ss -H -lnt 'sport = :18083')"
  mkdir -p "$CAN_CHILD/resource-inspects"

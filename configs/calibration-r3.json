@@ -29,6 +29,24 @@
     "memory_builders": "reviewed_targeted_repairs",
     "continuation_actors": "validation_actors"
   },
+  "runtime_hardware_override": {
+    "operations": {
+      "gpu_uuid": "GPU-31a471eb-a3b0-032b-8b74-9bd805c42af3",
+      "gpu_name": "NVIDIA L40",
+      "gpu_index_at_inspection": 4,
+      "reservation_origin": "Actual human any-free-compatible-GPU authority 01a17065-1088-7932-b7d1-cfa4460ab336; selected one GPU4"
+    },
+    "resource_authority": {
+      "human_thread_id": "01a1688e-8fee-7140-b505-6f93e571c740",
+      "human_message_id": "01a17065-1088-7932-b7d1-cfa4460ab336",
+      "verification_evidence_file": "docs/handoff/autonomous-main-user-evidence-20261025.json",
+      "verification_evidence_sha256": "30766737685e108b447a2fe772f6378af5765926313b15feeb3e05a8796482d7",
+      "scope": "One free compatible GPU for the unchanged bounded DEV calibration"
+    },
+    "expected_numerical_mode": "SM89 FP8 Marlin weight-only, bfloat16 activations, KV auto resolved bfloat16",
+    "hardware_stratum": "L40_SM89",
+    "reason": "GPU3 occupied at admission; separately authorized free compatible GPU4 selected before inference"
+  },
   "phases": {
     "prefix": "calibration-prefixes-r3",
     "handoff": "calibration-handoff-r3"

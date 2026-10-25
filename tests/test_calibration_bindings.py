@@ -8,11 +8,25 @@ from unittest.mock import patch
 
 from collusion_handoff.artifacts import atomic_json, read_json
 from collusion_handoff.calibration_cycle import (check_review_spans, file_sha, preflight_inventory,
-    source_qualifies, verify_preflight_inventory, verify_review_inputs)
+    source_qualifies, verify_preflight_inventory, verify_review_inputs, verify_sm89_runtime)
 from collusion_handoff.memory import MemoryError
 
 
 class CalibrationBindingTests(unittest.TestCase):
+    def test_device_rebind_checks_actual_marlin_and_BF16_before_any_actor_request(self):
+        with TemporaryDirectory() as temporary:
+            work = Path(temporary)
+            resolved = {"model_dtype": "torch.bfloat16", "kv_tensor_dtype": "torch.bfloat16", "kv_cache_dtype_setting": "auto"}
+            atomic_json(work / "resolved-engine.json", resolved)
+            log = work / "server.log"
+            log.write_text("Selected MarlinFP8ScaledMMLinearKernel for Fp8LinearMethod\n")
+            with patch("collusion_handoff.calibration_cycle.WORK", work), patch("httpx.Client", side_effect=AssertionError("No model client")):
+                verify_sm89_runtime({"runtime_hardware_override": {"hardware_stratum": "synthetic_SM89"}})
+                self.assertEqual(read_json(work / "hardware-stratum-runtime.json")["model_calls_before_runtime_check"], 0)
+                log.write_text("Selected another numerical kernel\n")
+                with self.assertRaises(MemoryError):
+                    verify_sm89_runtime({"runtime_hardware_override": {}})
+
     def test_future_Q_cap_or_second_task_change_is_blocked_even_if_first_wire_is_unchanged(self):
         changes = [lambda group: group["tasks"][1].update(cap="changed"),
                    lambda group: group["tasks"][2]["memory"].update(expected="changed"),
