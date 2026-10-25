@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import sys
 import traceback
+from unittest.mock import patch
 
 
 def main():
@@ -20,6 +21,9 @@ def main():
     parser.add_argument("--inference-codepath", type=Path, default=Path("/code"))
     parser.add_argument("--cycle", type=Path)
     parser.add_argument("--model", type=Path, default=Path("/model"))
+    parser.add_argument("--calibration-contract", type=Path)
+    parser.add_argument("--calibration-review", type=Path)
+    parser.add_argument("--calibration-preflight", type=Path)
     args = parser.parse_args()
     if os.getuid() == 0 or not Path("/.dockerenv").exists():
         raise RuntimeError("Requires the approved non-root CPU Docker")
@@ -55,9 +59,37 @@ def main():
     profiles = {"development-memory-v1": "configs/readiness-cycle-v4.json",
                 "development-checkpoint-memory-v1": "configs/readiness-cycle-v5.json",
                 "validation-continuations-v1": "configs/readiness-cycle-v5.json"}
-    require(phase["phase"] in profiles, "Unimplemented replay profile")
-    config_path = code / profiles[phase["phase"]]
-    config = read_json(config_path)
+    calibration = args.calibration_contract is not None
+    cycle = args.cycle.resolve() if args.cycle else completed.parent
+    require(calibration or phase["phase"] in profiles, "Unimplemented replay profile")
+    if calibration:
+        from collusion_handoff import calibration_cycle
+        require(args.calibration_review and args.calibration_preflight and os.environ.get("CUDA_VISIBLE_DEVICES") == "" and
+                not list(Path("/dev").glob("nvidia[0-9]*")) and {p.name for p in Path("/sys/class/net").iterdir()} == {"lo"},
+                "Calibration component replay requires explicit CPU-only review/preflight inputs")
+        config_path = args.calibration_contract.resolve()
+        require(config_path.is_relative_to(code), "Calibration contract is outside the frozen inference checkout")
+        with patch.object(calibration_cycle, "CODE", code), patch.object(calibration_cycle, "ROOT", cycle), \
+             patch.object(calibration_cycle, "REVIEW", args.calibration_review.resolve()), \
+             patch.object(calibration_cycle, "CONFIG", str(config_path.relative_to(code))), \
+             patch.dict(os.environ, {"ADAPTER_COMMIT": phase["code_commit"], "CYCLE_PHASE": phase["phase"]}):
+            amendment, config, _, effective_assets, closure = calibration_cycle.settings()
+            require(phase["phase"] == amendment["phases"]["handoff"], "Calibration memory replay requires the handoff phase")
+            require(phase == calibration_cycle.phase_identity(amendment, config, read_json(code / config["base_runtime_config"]), effective_assets),
+                    "Calibration phase differs from the frozen effective identity")
+        pre = read_json(args.calibration_preflight / "preflight.json")
+        require(pre["status"] == "passed_no_model_calls" and pre["identity"] == phase, "Actual calibration preflight differs")
+        calibration_cycle.verify_preflight_inventory(args.calibration_preflight, pre)
+        calibration_cycle.verify_review_inputs(args.calibration_review, pre)
+        require(type(pre["handoff_world"]) is int and pre["handoff_world"] in pre["selected_worlds"], "No selected calibration source")
+        require(read_json(completed / "source-selection.json") == read_json(args.calibration_preflight / "source-selection.json"),
+                "Actual calibration selection changed")
+        prefix_root = cycle / amendment["run_id"] / amendment["phases"]["prefix"]
+        require(calibration_cycle.prefix_bundle(prefix_root, pre["selected_worlds"]) == pre["historical_prefix_bundle"],
+                "Frozen historical calibration B/world/source inputs changed")
+    else:
+        config_path = code / profiles[phase["phase"]]
+        config = read_json(config_path)
     base = read_json(code / config["base_runtime_config"])
     if phase["phase"] != "development-memory-v1":
         from collusion_handoff.readiness_cycle import memory_implementation
@@ -66,7 +98,6 @@ def main():
         message_builder, resolver, full_delivery = messages_v4, resolve_v4, full_delivery_v4
     assets = read_json(completed / "assets.json")
     phase_name = phase["phase"]
-    cycle = args.cycle.resolve() if args.cycle else completed.parent
     errors, results, checks = [], {}, {}
 
     def read_rows(path):
@@ -90,7 +121,7 @@ def main():
             errors.append({"check": name, "traceback": traceback.format_exc()})
 
     def identities():
-        require(phase["phase"] in profiles, "Unsupported phase profile")
+        require(calibration or phase["phase"] in profiles, "Unsupported phase profile")
         require(sha256(config_path.read_bytes()).hexdigest() == phase["config_sha256"],
                 "Inference config differs from phase fingerprint")
         actual_assets = {stage: {"prompt": (code / spec["prompt"]).read_text(),
@@ -98,7 +129,8 @@ def main():
                          for stage, spec in config["memory"]["stages"].items()}
         require(actual_assets == assets and fingerprint(assets) == phase["assets_sha256"],
                 "Inference assets differ from frozen phase")
-        require(config["limits"] == phase["limits"] and config["allocations"] == phase["allocations"],
+        require(config["limits"] == phase["global_limits" if calibration else "limits"] and
+                config["allocations"] == phase["global_allocations" if calibration else "allocations"],
                 "Limits/allocations changed")
         require(config["paid_api_budget_usd"] == 0, "Unexpected paid route")
         return {"status": "passed", "inference_commit": phase["code_commit"],
@@ -266,6 +298,23 @@ def main():
     def jobs_audit():
         require((completed / "phase-status.json").exists(), "Component did not reach a complete receipt")
         terminal = read_json(completed / "phase-status.json")
+        if calibration:
+            number = pre["handoff_world"]
+            key = f"group-{number}"
+            job = completed / "memory" / key
+            source = read_json(prefix_root / "prefix" / key / "source.json")
+            require(read_json(job / "source.json") == source, "Memory input differs from the locked actual source")
+            require(read_json(job / "manifest.json") == {"job_id": phase_name + "/" + key,
+                    "source_archive_sha256": source["archive_sha256"], "assets_sha256": fingerprint(assets)},
+                    "Selected memory-job identity differs")
+            results[key] = replay_memory(job)
+            actual_ids = {identity for identity in request_map if identity.startswith(phase_name + "/")}
+            require(consumed == actual_ids and len(consumed) <= amendment["child_limits"]["memory_builder_calls"],
+                    "Unconsumed, extra or over-budget calibration builder requests")
+            require(all(request_map[identity]["allocation"] == "reviewed_targeted_repairs" for identity in consumed),
+                    "Calibration builder charged another allocation")
+            return {"status": "passed", "jobs": 1, "exact_component_calls_consumed": len(consumed),
+                    "actor_continuation_replay": "Separate required audit; not covered by this component profile"}
         if phase_name == "development-checkpoint-memory-v1":
             planned = {"known-regression-group-1", "checkpoint-group-4", "checkpoint-group-5"}
             require(set(terminal["jobs"]) == planned, "Missing assigned v5 memory job status")
@@ -328,6 +377,14 @@ def main():
               "scope": "Memory and controlled components only; actor continuation replay is separate",
               "new_model_calls": 0, "no_HTTP_client_constructed": True,
               "checks": checks, "jobs": results, "errors": errors, "human_gold": False, "main_started": False}
+    if calibration:
+        result["calibration_audit_profile"] = {
+            "contract_sha256": sha256(config_path.read_bytes()).hexdigest(),
+            "preflight_sha256": sha256((args.calibration_preflight / "preflight.json").read_bytes()).hexdigest(),
+            "audit_script_sha256": sha256(Path(__file__).read_bytes()).hexdigest(),
+            "review_inputs_sha256": pre["review_inputs_sha256"], "handoff_world": pre["handoff_world"],
+            "global_ledger_sha256": {name: sha256((cycle / "ledger" / name).read_bytes()).hexdigest()
+                                     for name in ("requests.jsonl", "responses.jsonl")}}
     atomic_json(output / "audit.json", result)
     print(canonical({"status": result["status"], "jobs": len(results), "errors": len(errors), "new_model_calls": 0}).decode())
     if errors:

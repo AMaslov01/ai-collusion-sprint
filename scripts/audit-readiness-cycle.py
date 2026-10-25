@@ -32,7 +32,7 @@ def main():
     parser.add_argument("--cycle", type=Path)
     parser.add_argument("--model", type=Path, default=Path("/model"))
     parser.add_argument("--catalog-csv", type=Path, default=Path("/database/accommodations/clean_accommodations_2022.csv"))
-    parser.add_argument("--calibration-contract", type=Path, help="Explicit frozen calibration prefix-only profile")
+    parser.add_argument("--calibration-contract", type=Path, help="Explicit frozen calibration prefix or handoff profile")
     parser.add_argument("--calibration-review", type=Path)
     parser.add_argument("--calibration-preflight", type=Path)
     parser.add_argument("--sealed-source-review", type=Path, action="append", default=[])
@@ -88,7 +88,8 @@ def main():
              patch.object(calibration_cycle, "CONFIG", str(contract_path.relative_to(code))), \
              patch.dict(os.environ, {"ADAPTER_COMMIT": phase["code_commit"], "CYCLE_PHASE": phase["phase"]}):
             amendment, config, _, _, closure = calibration_cycle.settings()
-            require(phase["phase"] == amendment["phases"]["prefix"], "Calibration profile replays prefixes only")
+            require(phase["phase"] in amendment["phases"].values(), "Unsupported calibration replay phase")
+            continuation = phase["phase"] == amendment["phases"]["handoff"]
             effective_assets = {stage: {"prompt": (code / spec["prompt"]).read_text(), "schema": read_json(code / spec["schema"])}
                                 for stage, spec in config["memory"]["stages"].items()}
             require(phase == calibration_cycle.phase_identity(amendment, config, read_json(code / config["base_runtime_config"]), effective_assets),
@@ -100,8 +101,18 @@ def main():
     selected = (config["selection"]["developmental_nominal_groups"] + config["selection"]["developmental_induced_groups"]
                 if development else config["selection"]["independent_validation_induced_groups"])
     if calibration:
-        selected = calibration_preflight["selected_worlds"]
-        require(selected == read_json(completed / "assignment.json")["selected_worlds"], "Frozen calibration source order changed")
+        source_order = calibration_preflight["selected_worlds"]
+        require(source_order == read_json(completed / "assignment.json")["selected_worlds"], "Frozen calibration source order changed")
+        selected = source_order
+        if continuation:
+            calibration_cycle.verify_preflight_inventory(args.calibration_preflight, calibration_preflight)
+            with patch.object(calibration_cycle, "REVIEW", args.calibration_review.resolve()):
+                calibration_cycle.verify_review_inputs(args.calibration_review, calibration_preflight)
+            number = calibration_preflight["handoff_world"]
+            require(type(number) is int and number in source_order, "No selected qualifying calibration world")
+            require(read_json(completed / "source-selection.json") == read_json(args.calibration_preflight / "source-selection.json"),
+                    "Actual calibration source selection differs from preflight")
+            selected = [number]
     smoke_spec = config.get("resource_smoke")
     smoke_spec = smoke_spec if smoke_spec and smoke_spec["phase"] == phase["phase"] else None
     hardware_active = development or smoke_spec is not None
@@ -274,7 +285,11 @@ def main():
                 "source_archive_sha256": source["archive_sha256"], "world_state_sha256": fingerprint(protocol.commits)}
 
     def continuations(number):
-        prefix_job = cycle / "validation-prefix-v1/prefix" / f"group-{number}"
+        prefix_root = cycle / amendment["run_id"] / amendment["phases"]["prefix"] if calibration else cycle / "validation-prefix-v1"
+        if calibration:
+            require(calibration_cycle.prefix_bundle(prefix_root, source_order) == calibration_preflight["historical_prefix_bundle"],
+                    "Frozen historical calibration B/world/source inputs changed")
+        prefix_job = prefix_root / "prefix" / f"group-{number}"
         actual = completed / "continuations" / f"group-{number}"
         require(read_json(actual / "status.json")["failure"] is None,
                 "Fatal continuation boundary needs a separately reviewed partial-phase replay")
@@ -316,6 +331,12 @@ def main():
             branch = abe_cycle.namespace(config["run_id"], number, "recipient/" + arm)
             require(rows(actual / branch / "events.jsonl") == rows(replay_group / branch / "events.jsonl"),
                     "Continuation append-only branch events differ")
+            if calibration and (actual / branch / "actual-requests.json").exists():
+                for request in read_json(actual / branch / "actual-requests.json"):
+                    require(request["payload"]["messages"][0] == {"role": "system", "content": prompts[request["role"]]},
+                            "A continuation retained an operative private system role")
+                    require(not any(origin["event_type"] == "private_goal_input" for origin in request["message_provenance"]),
+                            "A continuation retained a private-input origin")
         return {"status": "passed", "artifacts_compared": len(actual_files),
                 "assigned_opportunities": len(config["selection"]["arms"]) * 2,
                 "real_fork_runner": True, "new_model_calls": 0}
@@ -323,7 +344,7 @@ def main():
     for number in selected:
         operation = continuations if continuation else prefix
         check(f"group-{number}", lambda number=number: operation(number))
-    if calibration:
+    if calibration and not continuation:
         def assigned_prefix_audit():
             assigned = read_json(completed / "assigned-prefix-opportunities.json")
             expected = {(number, index) for number in selected for index in (1, 2)}
@@ -377,7 +398,9 @@ def main():
             "audit_script_sha256": sha256(Path(__file__).read_bytes()).hexdigest(),
             "sealed_source_review_sha256": {str(path): sha256(path.read_bytes()).hexdigest() for path in args.sealed_source_review},
             "global_ledger_sha256": {name: sha256((cycle / "ledger" / name).read_bytes()).hexdigest() for name in ("requests.jsonl", "responses.jsonl")},
-            "selected_worlds": selected, "parent_closure_sha256": phase["parent_closure_sha256"]}
+            "selected_worlds": source_order, "replayed_worlds": selected,
+            "handoff_world": calibration_preflight["handoff_world"],
+            "parent_closure_sha256": phase["parent_closure_sha256"]}
     atomic_json(output / "audit.json", report)
     print(canonical({"status": report["status"], "replayed_calls": len(consumed), "errors": len(errors), "new_model_calls": 0}).decode())
     if errors:
