@@ -17,8 +17,9 @@ def verify_analysis_review_binding(audit, review):
     require(isinstance(inventory, dict) and inventory, "Replay must bind the original collection review inventory")
     root = Path(review).resolve()
     for name, digest in inventory.items():
-        require(isinstance(name, str) and Path(name).name == name and name not in {".", ".."},
-                "Review inventory must contain confined filenames")
+        require(isinstance(name, str) and name and not Path(name).is_absolute()
+                and ".." not in Path(name).parts and name != ".",
+                "Review inventory must contain confined relative paths")
         path = root / name
         require(path.resolve().is_relative_to(root) and path.is_file()
                 and sha256(path.read_bytes()).hexdigest() == digest,

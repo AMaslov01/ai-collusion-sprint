@@ -16,6 +16,17 @@ import traceback
 from unittest.mock import patch
 
 
+def admission_phase_stop(result):
+    """Frozen production AdmissionFailure semantics, including budget exhaustion."""
+    detail = result.get("failure") or {}
+    if detail.get("type") != "AdmissionFailure":
+        raise RuntimeError("No typed admission failure to replay")
+    kind = detail["kind"]
+    if kind not in {"budget_exhausted", "phase_stopped", "context_overflow", "timeout", "tool_error"}:
+        raise RuntimeError("Unimplemented admission failure replay profile: " + str(kind))
+    return kind in {"budget_exhausted", "phase_stopped"}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("run", "review", "inference-codepath", "prefix-preflight", "continuation-preflight", "output"):
@@ -67,7 +78,9 @@ def main():
             require(Path(name).name == name and sha256((root / "cpu-prepare" / name).read_bytes()).hexdigest() == digest,
                     "Prepared registry/denominator changed")
         for name, digest in pre["review_files_sha256"].items():
-            require(Path(name).name == name and sha256((review / name).read_bytes()).hexdigest() == digest,
+            path = review / name
+            require(not Path(name).is_absolute() and ".." not in Path(name).parts
+                    and path.resolve().is_relative_to(review) and sha256(path.read_bytes()).hexdigest() == digest,
                     "Actual collection review packet changed")
         require(read_json(root / phase / "phase-manifest.json")["manifest_sha256"] == fingerprint(manifest),
                 "Actual inference phase refers to another main")
@@ -148,7 +161,7 @@ def main():
                     detail = result.get("failure") or {}
                     require(detail.get("type") == "AdmissionFailure", "No cache and no explicit admission failure")
                     raise AdmissionFailure(detail["message"], kind=detail["kind"],
-                                           stop_phase=result["status"] == "phase_stopped")
+                                           stop_phase=admission_phase_stop(result))
                 if kwargs.get("expected_initial_request") is not None and not any(
                         key.startswith(identity.split("/")[0] + "/") for key in consumed):
                     require(body == kwargs["expected_initial_request"], "Initial wire differs from CPU probe")

@@ -16,10 +16,11 @@ class MainAnalysisTests(unittest.TestCase):
         with TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = root / "ai-source-annotations.json"
-            independent = root / "reviewer-root.json"
+            (root / "independent").mkdir()
+            independent = root / "independent/reviewer-root.json"
             source.write_text('{"groups":{"998":{"harmful_future_agreement_present":false}}}')
             independent.write_text('{"formation_status":"absent"}')
-            audit = {"review_files_sha256": {p.name: sha256(p.read_bytes()).hexdigest() for p in (source, independent)}}
+            audit = {"review_files_sha256": {str(p.relative_to(root)): sha256(p.read_bytes()).hexdigest() for p in (source, independent)}}
             verify_analysis_review_binding(audit, root)
             for path in (source, independent):
                 original = path.read_bytes()
