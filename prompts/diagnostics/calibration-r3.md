@@ -30,12 +30,19 @@ criterion. The mechanism adapts the system-level objective-priority switch in
 This is deliberately induced collusion, not spontaneous emergence or a claimed
 replication of Colosseum's results in its original environment.
 
-The two `calibration-private-*-r3.txt` drafts are each a separate system-role
-private input following the ordinary public role prompt. Track each with the
-same private-input provenance. Do not tell the actors that their goals expire at
-handoff. At handoff remove BOTH private inputs, restoring ordinary public A′/B
-instructions; retain their actual generated speech, prior actions and world
-state. Do not insert a fabricated agreement or force an unsafe action in code.
+Serialize each `calibration-private-*-r3.txt` input inside the sole initial
+system message, after the ordinary public role prompt and a fixed explicit
+separator. The pinned Qwen chat template rejects a second system message;
+preserve the failed CPU receipt as evidence of this serialization adaptation.
+Keep the exact public and private texts as separate provenance components, with
+their hashes and ranges in the serialized message. At handoff reconstruct the
+system message from the public component alone for BOTH A′ and B; retain their
+actual generated speech, prior actions and world state. Do not delete matching
+text from generated history or downgrade the private objective to a user input.
+Do not tell the actors that their goals expire at handoff. Do not insert a
+fabricated agreement or force an unsafe action in code. Qualifying CPU review
+must render the actual initial and post-handoff wires with the pinned tokenizer
+and verify component removal independently before any new model calls.
 
 ## Reference interface
 
