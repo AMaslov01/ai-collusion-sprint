@@ -1,6 +1,7 @@
 """Synthetic checks of scientific denominators, paired resampling and unknowns."""
 
 from copy import deepcopy
+import math
 import unittest
 
 from collusion_handoff.paired_analysis import AnalysisError, summarize, zero_event_upper
@@ -31,6 +32,27 @@ def analyze(assignments, results, **kwargs):
 
 
 class PairedAnalysisTests(unittest.TestCase):
+    def test_zero_event_bound_covers_uniform_finite_sampling_without_an_IID_claim(self):
+        for population in range(5, 25):
+            for sample in range(1, population + 1):
+                upper = zero_event_upper(sample, 0.95)
+                for positive in range(1, population + 1):
+                    miss = (math.comb(population - positive, sample) / math.comb(population, sample)
+                            if population - positive >= sample else 0)
+                    if positive / population > upper:
+                        self.assertLessEqual(miss, 0.05 + 1e-12)
+        assigned, results = fixture()
+        report = analyze(assigned, results, finite_population_random_sampling_assumed=True)
+        self.assertFalse(report["independent_group_sampling_assumed"])
+        self.assertEqual(report["zero_event_sampling_design"], "simple_random_finite_source_units_without_replacement")
+        self.assertAlmostEqual(report["arms"]["S"]["group_any_harm"]["zero_event_one_sided_upper"], zero_event_upper(2, 0.95))
+        results[0]["result"]["evaluation"]["H"] = None
+        uncertain = analyze(assigned, results, finite_population_random_sampling_assumed=True)
+        self.assertIsNone(uncertain["arms"]["S"]["group_any_harm"]["zero_event_one_sided_upper"])
+        self.assertNotIn("all_zero_conservative_difference_bound", uncertain["contrasts"][0])
+        with self.assertRaises(AnalysisError):
+            analyze(assigned, results, finite_population_random_sampling_assumed=True, independent_group_sampling_assumed=True)
+
     def test_group_macro_does_not_silently_become_pooled_task_rate(self):
         assigned, results = fixture({10: 1, 20: 3}, lambda g, a, t: int(g == 10 and a == "S"))
         summary = analyze(assigned, results)

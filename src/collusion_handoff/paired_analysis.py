@@ -30,13 +30,18 @@ def key(row):
 
 
 def zero_event_upper(groups, confidence):
-    """One-sided exact bound for zero events in IID Bernoulli GROUP indicators."""
+    """Exact IID group bound; conservative for simple random finite-frame samples.
+
+    Without replacement, P(no event) = product(1-K/(M-i)) <= (1-K/M)**n.
+    The same inversion is therefore conservative for the finite-frame fraction.
+    """
     require(type(groups) is int and groups > 0 and 0 < confidence < 1, "Invalid zero-event bound")
     return -math.expm1(math.log1p(-confidence) / groups)
 
 
 def summarize(assignments, outcomes, *, population_group_ids, contrasts, bootstrap_draws,
-              seed, confidence_level, independent_group_sampling_assumed=False):
+              seed, confidence_level, independent_group_sampling_assumed=False,
+              finite_population_random_sampling_assumed=False):
     """Preserve fixed task denominators; bootstrap identical group indices for all arms.
 
     `assignments` is the immutable pre-branching registry. `outcomes` may be an
@@ -50,6 +55,12 @@ def summarize(assignments, outcomes, *, population_group_ids, contrasts, bootstr
     require(type(confidence_level) in (int, float) and math.isfinite(confidence_level)
             and 0 < confidence_level < 1, "Specify confidence level")
     require(type(independent_group_sampling_assumed) is bool, "Specify sampling assumption explicitly")
+    require(type(finite_population_random_sampling_assumed) is bool
+            and not (finite_population_random_sampling_assumed and independent_group_sampling_assumed),
+            "Specify one zero-event sampling design")
+    zero_bound_allowed = independent_group_sampling_assumed or finite_population_random_sampling_assumed
+    sampling_design = ("simple_random_finite_source_units_without_replacement" if finite_population_random_sampling_assumed
+                       else "iid_source_groups" if independent_group_sampling_assumed else "not_assumed")
     require(isinstance(assignments, list) and isinstance(outcomes, list), "Use explicit assigned/result lists")
     expected = [key(row) for row in assignments]
     require(expected and len(set(expected)) == len(expected), "Missing or duplicate assigned opportunities")
@@ -91,6 +102,7 @@ def summarize(assignments, outcomes, *, population_group_ids, contrasts, bootstr
               "bootstrap_draws": bootstrap_draws, "seed": seed, "confidence_level": confidence_level,
               "quantile_method": "numpy.linear", "rng": "numpy.PCG64", "numpy_version": np.__version__,
               "independent_group_sampling_assumed": independent_group_sampling_assumed,
+              "zero_event_sampling_design": sampling_design,
               "primary_denominator_policy": "One prefix per group; all assigned tasks, macro mean over source groups",
               "status": "descriptive_and_paired_bootstrap" if selected else "empty_pre_treatment_population",
               "arms": {}, "contrasts": [], "warnings": []}
@@ -145,8 +157,10 @@ def summarize(assignments, outcomes, *, population_group_ids, contrasts, bootstr
                                   "unknown_groups": sum(v is None for v in any_harm),
                                   "all_groups_observed_zero": zero_observed,
                                   "zero_event_one_sided_upper": zero_event_upper(len(selected), confidence_level)
-                                  if zero_observed and independent_group_sampling_assumed else None,
-                                  "bound_applies_to": "Probability of any harm in an IID source group, not a task-level binomial sample"}
+                                  if zero_observed and zero_bound_allowed else None,
+                                  "bound_applies_to": "Fraction of eligible finite-frame source units with any harm; conservative without-replacement bound"
+                                  if finite_population_random_sampling_assumed else
+                                  "Probability of any harm in an IID source group, not a task-level binomial sample"}
         report["arms"][arm] = item
     for contrast in contrasts:
         metric, minuend, subtrahend = (contrast[k] for k in ("metric", "minuend", "subtrahend"))
@@ -155,14 +169,17 @@ def summarize(assignments, outcomes, *, population_group_ids, contrasts, bootstr
         result = {**contrast, **estimate(left_lo - right_hi, left_hi - right_lo)}
         if result["degenerate_bootstrap"]:
             report["warnings"].append(f"Degenerate {metric}:{minuend}-{subtrahend} bootstrap is not proof of equivalence or zero risk.")
-        if metric == "H" and independent_group_sampling_assumed and all(
+        if metric == "H" and zero_bound_allowed and all(
                 report["arms"][arm]["group_any_harm"]["all_groups_observed_zero"] for arm in (minuend, subtrahend)):
             upper = zero_event_upper(len(selected), 1 - (1 - confidence_level) / 2)
             result["all_zero_conservative_difference_bound"] = {
                 "interval": [-upper, upper], "confidence_level": confidence_level,
-                "method": "Bonferroni two one-sided IID group-any bounds; mean task harm cannot exceed group-any probability"}
+                "method": "Bonferroni two one-sided group-any bounds; mean task harm cannot exceed group-any risk",
+                "sampling_design": sampling_design}
         report["contrasts"].append(result)
     report["warnings"].append("Identification bounds describe missing outcomes; their endpoint bootstrap intervals are not a confidence interval for a latent point effect.")
     report["warnings"].append("Population selection and canonical-E/cache integrity are verified outside this arithmetic module.")
     report["warnings"].append("Intervals are pointwise; no multiplicity-adjusted secondary significance decisions are implemented.")
+    if finite_population_random_sampling_assumed:
+        report["warnings"].append("The zero-event bound concerns uniformly sampled unique eligible source units in the frozen finite frame, not deployment risk. It requires fixed pre-treatment cohort membership and no unknown outcomes; bootstrap intervals remain approximate and do not apply a finite-population correction.")
     return report

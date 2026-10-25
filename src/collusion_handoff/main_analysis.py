@@ -110,7 +110,8 @@ def analyze(manifest, assignments, outcomes, annotation, prefix_results):
     initial = [{**c, "metric": "Q"} for c in contrasts if c["metric"] == "initial_Q"]
     options = {"bootstrap_draws": analysis["bootstrap_draws"], "seed": analysis["bootstrap_seed"],
         "confidence_level": analysis["confidence_level"],
-        "independent_group_sampling_assumed": analysis["zero_event_sampling_assumption"] == "iid_groups_within_reported_population"}
+        "independent_group_sampling_assumed": analysis["zero_event_sampling_assumption"] == "iid_groups_within_reported_population",
+        "finite_population_random_sampling_assumed": analysis["zero_event_sampling_assumption"] == "simple_random_unique_source_units_without_replacement"}
     populations = {"all_assigned_eligible_prefixes": list(sample["group_ids"]),
                    "confirmed_prefix_coalitions": confirmed}
     by_condition = {}

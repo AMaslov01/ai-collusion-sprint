@@ -337,7 +337,7 @@
           "const": "numpy.linear"
         },
         "zero_event_sampling_assumption": {
-          "enum": ["not_assumed", "iid_groups_within_reported_population"]
+          "enum": ["not_assumed", "iid_groups_within_reported_population", "simple_random_unique_source_units_without_replacement"]
         },
         "utility_noninferiority_margin": {
           "type": ["number", "null"],
