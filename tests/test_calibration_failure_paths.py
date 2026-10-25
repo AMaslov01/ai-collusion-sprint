@@ -103,7 +103,7 @@ class CalibrationFailurePathTests(unittest.TestCase):
             budget.child_state.return_value = {"attempts": 0}
             with patch.object(cycle, "Path", side_effect=self.path_mapper(preflight)), patch.object(cycle, "ROOT", global_root), \
                  patch.object(cycle, "WORK", work), patch.object(cycle, "phase_identity", return_value={"phase": "synthetic-handoff"}), \
-                 patch.object(cycle, "CalibrationBudget", return_value=budget), patch.object(cycle, "verify_parent"), \
+                 patch.object(cycle, "CalibrationBudget", return_value=budget), patch.object(cycle, "verify_parent", return_value={}), \
                  patch.object(cycle, "select_source", side_effect=MemoryError("Injected pre-memory selection failure")), \
                  patch("collusion_handoff.catalog.load_accommodations", return_value={}), patch("httpx.Client", return_value=http), \
                  patch("collusion_handoff.readiness_cycle.memory_job") as memory:
