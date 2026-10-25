@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from pathlib import Path
+from runpy import run_path
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
@@ -13,6 +14,13 @@ from collusion_handoff.memory import MemoryError
 
 
 class CalibrationBindingTests(unittest.TestCase):
+    def test_cached_admission_budget_stops_are_preserved_and_unknown_kinds_rejected(self):
+        helper = run_path(str(Path(__file__).resolve().parents[1] / "scripts/audit-readiness-cycle.py"))["admission_phase_stop"]
+        for kind in ("budget_exhausted", "phase_stopped", "context_overflow", "timeout", "tool_error"):
+            self.assertEqual(helper({"failure": {"type": "AdmissionFailure", "kind": kind}}), kind in {"budget_exhausted", "phase_stopped"})
+        with self.assertRaises(RuntimeError):
+            helper({"failure": {"type": "AdmissionFailure", "kind": "unreviewed_stop"}})
+
     def test_device_rebind_checks_actual_marlin_and_BF16_before_any_actor_request(self):
         with TemporaryDirectory() as temporary:
             work = Path(temporary)
