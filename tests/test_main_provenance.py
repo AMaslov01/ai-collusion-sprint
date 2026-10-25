@@ -41,7 +41,7 @@ class MainProvenanceTests(unittest.TestCase):
                        "files": {}, "prepared_files_sha256": {}, "review_files_sha256":
                        {} if phase == "prefixes" else {annotation.name: digest(annotation)}}
                 atomic_json(run / ("cpu-" + phase) / "preflight.json", pre)
-                atomic_json(run / phase / "phase-manifest.json", {"manifest_sha256": fingerprint(manifest),
+                atomic_json(run / phase / "phase-manifest.json", {"manifest_sha256": fingerprint(manifest), "phase": phase,
                             "CPU_preflight_sha256": digest(run / ("cpu-" + phase) / "preflight.json")})
             atomic_json(annotation, {"synthetic_label": "different but internally consistent source label"})
             path = run / "cpu-continuations/preflight.json"
@@ -54,7 +54,7 @@ class MainProvenanceTests(unittest.TestCase):
             with patch.object(sys, "argv", argv), patch.object(sys, "path", list(sys.path)), \
                  patch("collusion_handoff.main_cycle.approved_pipeline", return_value=(manifest, {}, {}, {}, {})), \
                  patch("collusion_handoff.main_cycle.prefix_bundle", side_effect=AssertionError("Must reject before native state")):
-                with self.assertRaisesRegex(RuntimeError, "Supplied CPU receipt differs"):
+                with self.assertRaisesRegex(AnalysisError, "Supplied CPU receipt differs"):
                     cache.main()
 
     def test_analysis_rejects_phase_or_annotation_mutation_after_a_successful_audit(self):
@@ -66,10 +66,17 @@ class MainProvenanceTests(unittest.TestCase):
             annotation = review / "ai-source-annotations.json"
             atomic_json(phase, {"synthetic_phase": "original"})
             atomic_json(annotation, {"synthetic_mask": "locked"})
-            manifest = {"analysis": {"analysis_code_sha256": digest(ROOT / "scripts/analyze-main.py")}}
+            manifest = {"analysis": {"analysis_code_sha256": digest(ROOT / "scripts/analyze-main.py")},
+                        "sample": {"group_ids": [], "prefix_task_indices": [1, 2]}}
+            required = ["main-manifest.json", "ledger/requests.jsonl", "ledger/responses.jsonl",
+                        "cpu-prepare/assigned-future-opportunities.json", "continuations/all-assigned-results.json",
+                        "prefixes/phase-manifest.json", "continuations/phase-manifest.json"]
+            for name in required:
+                if not (run / name).exists():
+                    atomic_json(run / name, {"synthetic_locked_input": name})
             audit = {"schema": "main_cache_replay_v1", "status": "passed_cache_only", "manifest_sha256": fingerprint(manifest),
                      "new_model_calls": 0, "review_files_sha256": {annotation.name: digest(annotation)},
-                     "input_sha256": {str(phase.relative_to(run)): digest(phase)}}
+                     "input_sha256": {name: digest(run / name) for name in required}}
             audit_path = base / "audit.json"
             atomic_json(audit_path, audit)
             argv = ["analysis", "--run", str(run), "--review", str(review), "--cache-audit", str(audit_path), "--output", str(base / "result.json")]
@@ -78,7 +85,8 @@ class MainProvenanceTests(unittest.TestCase):
                 for target in (phase, annotation):
                     original = target.read_bytes()
                     atomic_json(target, {"synthetic_mutation": "after successful audit"})
-                    with self.assertRaises(AnalysisError):
+                    expected = "Canonical analysis input changed" if target == phase else "Source labels/reviewer/reference packet changed"
+                    with self.assertRaisesRegex(AnalysisError, expected):
                         analysis.main()
                     target.write_bytes(original)
 
