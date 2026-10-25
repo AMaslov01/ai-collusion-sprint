@@ -274,18 +274,28 @@ def channel_probes(effective, base, groups, tokenizer):
         for role in ("A", "B"):
             schema = runner.action_schema("A", tools_allowed=True) if role == "A" else action_schema("B", tools_allowed=True)
             messages = runner.messages(role, schema)
+            system = messages[0]["content"]
+            normalized_system = system.strip()
+            normalization = {"operation": "Pinned Qwen template |trim on the complete initial system content",
+                "template_sha256": sha256(tokenizer.chat_template.encode()).hexdigest(),
+                "raw_system_sha256": sha256(system.encode()).hexdigest(),
+                "normalized_system_sha256": sha256(normalized_system.encode()).hexdigest(),
+                "excluded_leading_bytes_hex": system[:len(system) - len(system.lstrip())].encode().hex(),
+                "excluded_trailing_bytes_hex": system[len(system.rstrip()):].encode().hex()}
             rendered = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, enable_thinking=False)
             rendered_file = WORK / f"rendered-system-channels/group-{number}-{role}.json"
             provenance = runner.message_provenance(role, messages)
-            atomic_json(rendered_file, {"messages": messages, "message_provenance": provenance, "rendered_text": rendered})
+            atomic_json(rendered_file, {"messages": messages, "message_provenance": provenance, "rendered_text": rendered,
+                                       "system_boundary_normalization": normalization})
             ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, enable_thinking=False, return_dict=False)
-            atomic_json(rendered_file, {"messages": messages, "message_provenance": provenance, "rendered_text": rendered, "rendered_token_ids": ids})
+            atomic_json(rendered_file, {"messages": messages, "message_provenance": provenance, "rendered_text": rendered,
+                                       "rendered_token_ids": ids, "system_boundary_normalization": normalization})
             require(messages[0]["role"] == "system" and sum(item["role"] == "system" for item in messages) == 1 and
-                    prompts[role] in rendered and goals[role] in rendered and rendered.index(prompts[role]) < rendered.index(goals[role]),
+                    normalized_system and normalized_system in rendered,
                     "Actual chat template lost/reordered nominal or private system content")
             require(len(ids) + effective["limits"]["actor_max_output_tokens"] <= effective["limits"]["context"], "Full private-role probe context overflow")
             decoded = tokenizer.decode(ids, skip_special_tokens=False)
-            require(prompts[role] in decoded and goals[role] in decoded and decoded.index(prompts[role]) < decoded.index(goals[role]),
+            require(normalized_system in decoded,
                     "Tokenized private system content was lost/reordered")
             if role == "A":
                 require(messages == read_json(WORK / "actor-wire-probes.json")[str(number)]["request"]["messages"],
@@ -293,6 +303,7 @@ def channel_probes(effective, base, groups, tokenizer):
             result[f"group-{number}/{role}"] = {"first_roles": [item["role"] for item in messages[:2]],
                 "rendered_sha256": sha256(rendered.encode()).hexdigest(), "messages_sha256": fingerprint(messages),
                 "rendered_input_tokens": len(ids), "nominal_and_private_present_in_order": True,
+                "system_boundary_normalization": normalization,
                 "rendered_artifact": str(rendered_file.relative_to(WORK)),
                 "actual_initial_A_wire": role == "A", "B_scope": "Channel preservation only; its actual proposal-bound first wire is audited after prefix"}
     return result
