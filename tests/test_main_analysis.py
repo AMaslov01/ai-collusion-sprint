@@ -5,13 +5,50 @@ from hashlib import sha256
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+import json
 
-from collusion_handoff.main_analysis import analyze, confirmed_groups, initial_proposal_outcomes, verify_analysis_review_binding
+from collusion_handoff.main_analysis import (analyze, confirmed_groups, initial_proposal_outcomes,
+    verify_analysis_review_binding, verify_phase_preflight_binding, verify_analysis_run_binding,
+    verify_executing_analysis_driver)
 from collusion_handoff.paired_analysis import AnalysisError
 from test_main_manifest import synthetic_packet
 
 
 class MainAnalysisTests(unittest.TestCase):
+    def test_replaced_consistent_preflight_is_not_the_receipt_used_by_inference(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pre = root / "preflight.json"
+            phase = root / "phase-manifest.json"
+            pre.write_text(json.dumps({"manifest_sha256": "m", "review_files_sha256": {"labels.json": "old-mask"}}))
+            phase.write_text(json.dumps({"phase": "continuations", "manifest_sha256": "m",
+                "CPU_preflight_sha256": sha256(pre.read_bytes()).hexdigest()}))
+            verify_phase_preflight_binding(phase, pre, "m", "continuations")
+            pre.write_text(json.dumps({"manifest_sha256": "m", "review_files_sha256": {"labels.json": "new-mask"}}))
+            with self.assertRaises(AnalysisError):
+                verify_phase_preflight_binding(phase, pre, "m", "continuations")
+
+    def test_changed_phase_manifest_and_different_driver_are_not_the_frozen_analysis(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            phase = root / "phase-manifest.json"
+            phase.write_text('{"CPU_preflight_sha256":"original"}')
+            audit = {"input_sha256": {phase.name: sha256(phase.read_bytes()).hexdigest()}}
+            verify_analysis_run_binding(audit, root, [phase.name])
+            phase.write_text('{"CPU_preflight_sha256":"replacement"}')
+            with self.assertRaises(AnalysisError):
+                verify_analysis_run_binding(audit, root, [phase.name])
+            with self.assertRaises(AnalysisError):
+                verify_analysis_run_binding({"input_sha256": {}}, root, [phase.name])
+            driver = root / "analyze.py"
+            driver.write_text('print("frozen arithmetic")\n')
+            driver_sha = sha256(driver.read_bytes()).hexdigest()
+            verify_executing_analysis_driver(driver, driver_sha)
+            other = root / "other.py"
+            other.write_text('print("different arithmetic")\n')
+            with self.assertRaises(AnalysisError):
+                verify_executing_analysis_driver(other, driver_sha)
+
     def test_changed_source_labels_or_reviewer_lock_cannot_change_population_after_replay(self):
         with TemporaryDirectory() as temporary:
             root = Path(temporary)

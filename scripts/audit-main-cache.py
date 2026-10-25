@@ -50,6 +50,7 @@ def main():
     from collusion_handoff.abe_runner import AdmissionFailure
     from collusion_handoff.artifacts import atomic_json, canonical, fingerprint, read_json
     from collusion_handoff.catalog import load_accommodations
+    from collusion_handoff.main_analysis import verify_phase_preflight_binding
     from collusion_handoff.memory import strict_json
     from collusion_handoff.memory_v4 import constrained_payload
 
@@ -82,10 +83,8 @@ def main():
             require(not Path(name).is_absolute() and ".." not in Path(name).parts
                     and path.resolve().is_relative_to(review) and sha256(path.read_bytes()).hexdigest() == digest,
                     "Actual collection review packet changed")
-        actual_phase = read_json(root / phase / "phase-manifest.json")
-        require(actual_phase["manifest_sha256"] == fingerprint(manifest)
-                and actual_phase["CPU_preflight_sha256"] == sha256((folder / "preflight.json").read_bytes()).hexdigest(),
-                "Supplied CPU receipt differs from the receipt recorded by the actual inference phase")
+        verify_phase_preflight_binding(root / phase / "phase-manifest.json", folder / "preflight.json",
+                                       fingerprint(manifest), phase)
     require(main_cycle.prefix_bundle(root / "prefixes", manifest["sample"]["group_ids"])
             == continuation_preflight["historical_prefix_bundle"], "Historical B/world/source bundle changed")
     requests, responses = rows(root / "ledger/requests.jsonl"), rows(root / "ledger/responses.jsonl")

@@ -9,7 +9,8 @@ import sys
 sys.path.insert(0, "/code/src")
 
 from collusion_handoff.artifacts import atomic_json, fingerprint, read_json
-from collusion_handoff.main_analysis import analyze, verify_analysis_review_binding
+from collusion_handoff.main_analysis import (analyze, verify_analysis_review_binding,
+    verify_analysis_run_binding, verify_executing_analysis_driver)
 from collusion_handoff.main_cycle import annotation_receipt_name, approved_pipeline, verify_annotations
 from collusion_handoff.paired_analysis import require
 
@@ -27,17 +28,21 @@ def main():
     require(not args.output.exists() and root != args.output.resolve() and root not in args.output.resolve().parents,
             "Use a new immutable analysis outside the input run")
     manifest, config, _, _, _ = approved_pipeline(args.review, Path("/code"))
-    require(sha256(Path(__file__).read_bytes()).hexdigest() == manifest["analysis"]["analysis_code_sha256"],
-            "Executing analysis driver differs from the frozen analysis implementation")
+    verify_executing_analysis_driver(__file__, manifest["analysis"]["analysis_code_sha256"])
     audit = read_json(args.cache_audit)
     require(audit["schema"] == "main_cache_replay_v1" and audit["status"] == "passed_cache_only"
             and audit["manifest_sha256"] == fingerprint(manifest) and audit["new_model_calls"] == 0,
             "Matching successful production cache replay is required")
     verify_analysis_review_binding(audit, args.review)
-    for name, digest in audit["input_sha256"].items():
-        path = root / name
-        require(path.resolve().is_relative_to(root) and sha256(path.read_bytes()).hexdigest() == digest,
-                "Canonical analysis input changed after replay")
+    required_paths = ["main-manifest.json", "ledger/requests.jsonl", "ledger/responses.jsonl",
+        "cpu-prepare/assigned-future-opportunities.json", "continuations/all-assigned-results.json",
+        "prefixes/phase-manifest.json", "continuations/phase-manifest.json"]
+    for number in manifest["sample"]["group_ids"]:
+        required_paths.extend(f"prefixes/prefix/group-{number}/" + name
+            for name in ("source.json", "snapshot.json", "private-registry-bound.json"))
+        required_paths.extend(f"prefixes/prefix/group-{number}/results/g{number}-t{index}.json"
+                              for index in manifest["sample"]["prefix_task_indices"])
+    verify_analysis_run_binding(audit, root, required_paths)
     assignments = read_json(root / "cpu-prepare/assigned-future-opportunities.json")
     outcomes = read_json(root / "continuations/all-assigned-results.json")["observed"]
     groups, prefix_results = {}, {}

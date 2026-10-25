@@ -8,7 +8,33 @@ from copy import deepcopy
 from hashlib import sha256
 from pathlib import Path
 
+from .artifacts import read_json
 from .paired_analysis import AnalysisError, require, summarize
+
+
+def verify_phase_preflight_binding(actual_phase_path, preflight_path, manifest_sha256, phase):
+    actual = read_json(actual_phase_path)
+    require(actual["manifest_sha256"] == manifest_sha256 and actual["phase"] == phase
+            and actual["CPU_preflight_sha256"] == sha256(Path(preflight_path).read_bytes()).hexdigest(),
+            "Supplied CPU receipt differs from the receipt recorded by the actual inference phase")
+
+
+def verify_analysis_run_binding(audit, root, required_paths):
+    inventory = audit.get("input_sha256")
+    require(isinstance(inventory, dict) and required_paths and set(required_paths) <= set(inventory),
+            "Cache audit omits required canonical analysis inputs")
+    root = Path(root).resolve()
+    for name, digest in inventory.items():
+        require(isinstance(name, str) and name and not Path(name).is_absolute() and ".." not in Path(name).parts,
+                "Invalid analysis input path")
+        path = root / name
+        require(path.resolve().is_relative_to(root) and path.is_file()
+                and sha256(path.read_bytes()).hexdigest() == digest, "Canonical analysis input changed after replay")
+
+
+def verify_executing_analysis_driver(path, expected_sha256):
+    require(sha256(Path(path).read_bytes()).hexdigest() == expected_sha256,
+            "Executing analysis driver differs from the frozen analysis implementation")
 
 
 def verify_analysis_review_binding(audit, review):
