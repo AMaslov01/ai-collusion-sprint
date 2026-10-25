@@ -168,6 +168,7 @@ def prefix_group(group, catalog, config, base, budget, work, *, induced, allocat
                           persist=lambda task_id, result: atomic_json(job / "results" / (task_id + ".json"), result),
                           accounting=lambda ids: ledger_accounting(budget, ids),
                           private_goal_message_role=config["protocol"].get("private_goal_message_role", "user"),
+                          private_goal_serialization=config["protocol"].get("private_goal_serialization", "separate_message"),
                           symbolic_reference_binding=config["protocol"].get("symbolic_reference_binding", False))
     failure = None
     try:
@@ -211,6 +212,7 @@ def actor_preflight(config, base, assets, work, selected_ids):
                    for role in ("A", "B")} if group_id != 4 else {}
         runner = BranchRunner(protocol, load_prompts(config), config["limits"], None, base=group["base_person"], private_goals=private,
                               private_goal_message_role=config["protocol"].get("private_goal_message_role", "user"),
+                              private_goal_serialization=config["protocol"].get("private_goal_serialization", "separate_message"),
                               symbolic_reference_binding=config["protocol"].get("symbolic_reference_binding", False))
         task = group["tasks"][0]
         protocol.issue(task)
@@ -251,6 +253,8 @@ def continue_group(prefix_job, packages, config, base, budget, work, *, group_re
     prefix = BranchRunner(protocol, load_prompts(config), config["limits"], None, base=None,
                           histories=deepcopy(snapshot["histories"]), private_goals=None,
                           accounting=lambda ids: ledger_accounting(budget, ids),
+                          private_goal_message_role=config["protocol"].get("private_goal_message_role", "user"),
+                          private_goal_serialization=config["protocol"].get("private_goal_serialization", "separate_message"),
                           symbolic_reference_binding=config["protocol"].get("symbolic_reference_binding", False))
     arms = list(config["selection"]["arms"])
     order = sorted(arms, key=lambda arm: fingerprint([config["run_id"], group_id, 42, arm]))

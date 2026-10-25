@@ -1,6 +1,7 @@
 """Typed execution identifiers and opt-in private channels; synthetic replies only."""
 
 from copy import deepcopy
+from hashlib import sha256
 import json
 from pathlib import Path
 import unittest
@@ -10,7 +11,7 @@ from jsonschema import Draft202012Validator, ValidationError
 from collusion_handoff.abe_evaluation import evaluate_opportunity
 from collusion_handoff.abe_protocol import (Protocol, action_schema, bind_symbolic_references,
     validate_bound_action, visible_committed_proposals)
-from collusion_handoff.abe_runner import BranchRunner
+from collusion_handoff.abe_runner import BranchRunner, PRIVATE_SYSTEM_SEPARATOR
 from collusion_handoff.artifacts import fingerprint, read_json
 from collusion_handoff.memory import MemoryError
 from test_abe_protocol import fixture_task
@@ -134,6 +135,39 @@ class SymbolicReferenceTests(unittest.TestCase):
             self.assertEqual(result["failure"]["type"], "ValidationError")
             self.assertEqual(result["failure"]["kind"], "bound_action_schema")
             self.assertEqual(result["model_calls"], 1)
+
+    def test_single_system_serialization_has_exact_component_bytes_and_origin_based_fork(self):
+        limits = read_json(ROOT / "configs/readiness-cycle-v5.json")["limits"]
+        prompts = {"A": "Публичная роль A\n", "B": "Публичная роль B\n"}
+        goals = {"A": "Частная цель A\n", "B": "Частная цель B\n"}
+        prefix = BranchRunner(Protocol(4, "synthetic", CATALOG), prompts, limits, None,
+            base={"name": "Base", "query": "Synthetic", "daily_plans": []}, private_goals=goals,
+            private_goal_message_role="system", private_goal_serialization="append_to_initial_system")
+        for role in ("A", "B"):
+            messages = prefix.messages(role, action_schema(role, tools_allowed=True))
+            self.assertEqual(sum(item["role"] == "system" for item in messages), 1)
+            self.assertEqual(messages[0]["content"], prompts[role] + PRIVATE_SYSTEM_SEPARATOR + goals[role])
+            provenance = prefix.message_provenance(role, messages)
+            self.assertEqual(provenance[0]["event_type"], "current_system_inputs")
+            raw = messages[0]["content"].encode("utf-8")
+            components = provenance[0]["components"]
+            self.assertEqual([item["event_type"] for item in components],
+                             ["current_nominal_role", "system_input_separator", "private_goal_input"])
+            offset = 0
+            for component, expected in zip(components, (prompts[role], PRIVATE_SYSTEM_SEPARATOR, goals[role])):
+                self.assertEqual(component["start_utf8"], offset)
+                value = raw[component["start_utf8"]:component["end_utf8"]]
+                self.assertEqual(value, expected.encode("utf-8"))
+                self.assertEqual(component["content_sha256"], sha256(value).hexdigest())
+                offset = component["end_utf8"]
+            self.assertEqual(offset, len(raw))
+        prefix.add("B", "assistant", "peer_message", "Generated quote: " + goals["A"], "A")
+        future = prefix.fork("synthetic-recipient", None, None)
+        for role in ("A", "B"):
+            messages = future.messages(role, action_schema(role, tools_allowed=True))
+            self.assertEqual(messages[0], {"role": "system", "content": prompts[role]})
+            self.assertNotIn("private_goal_input", str(future.message_provenance(role, messages)))
+        self.assertIn("Generated quote: " + goals["A"], [record["content"] for record in future.histories["B"]])
 
     def test_system_goal_optin_and_both_removed_after_actual_fork(self):
         limits = read_json(ROOT / "configs/readiness-cycle-v5.json")["limits"]

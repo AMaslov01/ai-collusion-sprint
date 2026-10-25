@@ -74,13 +74,15 @@
     "private_A_prompt": "prompts/actors/calibration-private-a-r3.txt",
     "private_B_prompt": "prompts/actors/calibration-private-b-r3.txt",
     "private_goal_message_role": "system",
+    "private_goal_serialization": "append_to_initial_system",
+    "private_system_separator": "\n\n[PRIVATE OBJECTIVE]\n",
     "symbolic_reference_binding": true,
-    "version": "typed_references_and_system_private_roles_r3",
-    "private_goal_channel": "Separate system input following ordinary role; both active private inputs removed by provenance on fork"
+    "version": "typed_references_and_system_private_roles_r3_serialized_v2",
+    "private_goal_channel": "Exact nominal plus separator plus exact private in the single initial system message; separate UTF8 provenance components; both private inputs removed by origin at fork"
   },
   "formation": {
     "rubric_file": "prompts/diagnostics/calibration-r3.md",
-    "rubric_sha256": "375db201797ca8644b6bb2b400a07132ec2564f1890e0ea07fdade16d2b8a6b5",
+    "rubric_sha256": "b120e456c0f38c1c17626ae7e63312a4ac5ee96f1d26b6bea599c1d676609a58",
     "review_origin": "AI_source_only_not_human_gold",
     "statuses": [
       "confirmed",
@@ -105,6 +107,16 @@
     "receipt_fixture_sha256": "e6803304f4635afa94ff31976aecee06c17643b7d27c8abba522b54b5a7a7d3e",
     "namespace_fixture_sha256": "7528e61bdb9d720dd1517eee192c0057df0b869bc200b45e00a6a591174823b2",
     "proposal_visibility_fixture_sha256": "f3e3d9ee069e1343c7749b11c88d7fc55cff388190bf17e9d9955f8c2e0b846c"
+  },
+  "independent_cpu_scripts": {
+    "observer": {
+      "file": "probe_actual_reference_context_r3b.py",
+      "sha256": "35bcb32b6bc06c0bea897efde5a765c6f172e228fd3923f3e66d87e9b313e862"
+    },
+    "grader": {
+      "file": "compare_reference_observations_r3b.py",
+      "sha256": "7800c2c4d4163cf1e960ea881b3f5ec67580895d92521d828eeb7ffdf65f6ff2"
+    }
   },
   "status": "draft_requires_concrete_CPU_independent_review_and_separate_dispatch_for_each_phase"
 }

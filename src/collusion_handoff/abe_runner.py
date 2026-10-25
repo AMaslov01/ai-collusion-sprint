@@ -16,6 +16,9 @@ from .artifacts import canonical, fingerprint
 from .memory import MemoryError, require, strict_json
 
 
+PRIVATE_SYSTEM_SEPARATOR = "\n\n[PRIVATE OBJECTIVE]\n"
+
+
 class ServiceFailure(RuntimeError):
     """Stop the phase on a model-service/transport failure; never retry."""
     def __init__(self, message, *, kind="model_service_failure"):
@@ -35,15 +38,19 @@ class TaskLimitExceeded(MemoryError):
 
 class BranchRunner:
     def __init__(self, protocol, prompts, limits, generate, *, base, histories=None, archive=None, private_goals=None, persist=None, accounting=None,
-                 private_goal_message_role="user", symbolic_reference_binding=False):
+                 private_goal_message_role="user", symbolic_reference_binding=False, private_goal_serialization="separate_message"):
         self.protocol, self.prompts, self.limits = protocol, prompts, limits
         self.generate, self.persist = generate, persist
         self.accounting = accounting
         self.histories = deepcopy(histories) if histories is not None else {"A": [], "B": []}
         self.archive, self.private_goals = archive, private_goals or {}
         require(private_goal_message_role in {"user", "system"}, "Unsupported private-goal message role")
+        require(private_goal_serialization in {"separate_message", "append_to_initial_system"}, "Unsupported private-goal serialization")
+        require(private_goal_serialization != "append_to_initial_system" or private_goal_message_role == "system",
+                "Initial-system serialization requires a system-level private objective")
         require(type(symbolic_reference_binding) is bool, "Reference binding must be an explicit boolean")
         self.private_goal_message_role = private_goal_message_role
+        self.private_goal_serialization = private_goal_serialization
         self.symbolic_reference_binding = symbolic_reference_binding
         self.receipts = {role: set() for role in ("A", "B")}
         for role in ("A", "B"):
@@ -72,7 +79,10 @@ class BranchRunner:
     def messages(self, role, schema):
         result = [{"role": "system", "content": self.prompts[role]}]
         if role in self.private_goals:
-            result.append({"role": self.private_goal_message_role, "content": self.private_goals[role]})
+            if self.private_goal_serialization == "append_to_initial_system":
+                result[0]["content"] += PRIVATE_SYSTEM_SEPARATOR + self.private_goals[role]
+            else:
+                result.append({"role": self.private_goal_message_role, "content": self.private_goals[role]})
         if role == "A" and self.archive is not None:
             result.append({"role": "user", "content": "[PRIVATE ARCHIVE]\n" + self.archive + "\n[/PRIVATE ARCHIVE]"})
         result.extend(historical_messages(self.histories[role]))
@@ -95,7 +105,21 @@ class BranchRunner:
     def message_provenance(self, role, messages):
         origins = [{"event_type": "current_nominal_role", "origin_event_id": "nominal-role/" + role}]
         if role in self.private_goals:
-            origins.append({"event_type": "private_goal_input", "origin_event_id": self.protocol.branch_id + "/private-input-" + role})
+            private_origin = self.protocol.branch_id + "/private-input-" + role
+            if self.private_goal_serialization == "append_to_initial_system":
+                components, offset = [], 0
+                for kind, origin, text in (("current_nominal_role", "nominal-role/" + role, self.prompts[role]),
+                        ("system_input_separator", "system-private-separator/v1", PRIVATE_SYSTEM_SEPARATOR),
+                        ("private_goal_input", private_origin, self.private_goals[role])):
+                    raw = text.encode("utf-8")
+                    components.append({"event_type": kind, "origin_event_id": origin, "start_utf8": offset,
+                                       "end_utf8": offset + len(raw), "content_sha256": sha256(raw).hexdigest()})
+                    offset += len(raw)
+                require(messages[0] == {"role": "system", "content": self.prompts[role] + PRIVATE_SYSTEM_SEPARATOR + self.private_goals[role]},
+                        "Initial system components differ from actual wire")
+                origins[0] = {"event_type": "current_system_inputs", "origin_event_id": "system-inputs/" + role, "components": components}
+            else:
+                origins.append({"event_type": "private_goal_input", "origin_event_id": private_origin})
         if role == "A" and self.archive is not None:
             origins.append({"event_type": "selected_historical_archive", "origin_event_id": "selected-archive"})
         origins.extend({"event_type": record["event_type"], "origin_event_id": record["origin_event_id"]} for record in self.histories[role])
@@ -232,4 +256,6 @@ class BranchRunner:
         return BranchRunner(protocol, self.prompts, self.limits, generate, base=None,
                             histories={"A": a_base, "B": b_history}, archive=archive,
                             private_goals=None, persist=persist, accounting=self.accounting,
+                            private_goal_message_role=self.private_goal_message_role,
+                            private_goal_serialization=self.private_goal_serialization,
                             symbolic_reference_binding=self.symbolic_reference_binding)

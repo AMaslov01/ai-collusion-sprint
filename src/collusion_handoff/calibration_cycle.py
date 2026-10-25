@@ -105,6 +105,7 @@ def unfinished_result(task_id, branch, requests, reason, accounting_error=None):
 
 
 def settings():
+    from .abe_runner import PRIVATE_SYSTEM_SEPARATOR
     amendment = read_json(CODE / CONFIG)
     require(amendment["schema"] == "bounded_DEV_calibration_amendment_r3" and amendment["main_allowed"] is False,
             "No reviewed DEV calibration amendment")
@@ -131,6 +132,8 @@ def settings():
     effective["run_id"] = amendment["run_id"]
     effective["protocol"].update(amendment["protocol_overrides"])
     require(effective["protocol"]["private_goal_message_role"] == "system" and
+            effective["protocol"]["private_goal_serialization"] == "append_to_initial_system" and
+            effective["protocol"]["private_system_separator"] == PRIVATE_SYSTEM_SEPARATOR and
             effective["protocol"]["symbolic_reference_binding"] is True, "Required calibration options missing")
     require(effective["selection"]["arms"] == amendment["arms"] == ["F", "S", "C", "CV", "CVP", "R"], "Arm matrix changed")
     base = read_json(CODE / effective["base_runtime_config"])
@@ -263,7 +266,7 @@ def channel_probes(effective, base, groups, tokenizer):
     for number, group in groups.items():
         protocol = Protocol(number, namespace(effective["run_id"], number, "prefix"), {})
         runner = BranchRunner(protocol, prompts, effective["limits"], None, base=group["base_person"], private_goals=goals,
-                              private_goal_message_role="system", symbolic_reference_binding=True)
+                              private_goal_message_role="system", private_goal_serialization="append_to_initial_system", symbolic_reference_binding=True)
         task = group["tasks"][0]
         protocol.issue(task)
         for role in ("A", "B"):
@@ -273,10 +276,11 @@ def channel_probes(effective, base, groups, tokenizer):
             messages = runner.messages(role, schema)
             rendered = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, enable_thinking=False)
             rendered_file = WORK / f"rendered-system-channels/group-{number}-{role}.json"
-            atomic_json(rendered_file, {"messages": messages, "rendered_text": rendered})
+            provenance = runner.message_provenance(role, messages)
+            atomic_json(rendered_file, {"messages": messages, "message_provenance": provenance, "rendered_text": rendered})
             ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, enable_thinking=False, return_dict=False)
-            atomic_json(rendered_file, {"messages": messages, "rendered_text": rendered, "rendered_token_ids": ids})
-            require([item["role"] for item in messages[:2]] == ["system", "system"] and
+            atomic_json(rendered_file, {"messages": messages, "message_provenance": provenance, "rendered_text": rendered, "rendered_token_ids": ids})
+            require(messages[0]["role"] == "system" and sum(item["role"] == "system" for item in messages) == 1 and
                     prompts[role] in rendered and goals[role] in rendered and rendered.index(prompts[role]) < rendered.index(goals[role]),
                     "Actual chat template lost/reordered nominal or private system content")
             require(len(ids) + effective["limits"]["actor_max_output_tokens"] <= effective["limits"]["context"], "Full private-role probe context overflow")

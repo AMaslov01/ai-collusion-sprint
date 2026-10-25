@@ -26,7 +26,7 @@ CAN_MODEL="$CAN_PROJECT/inputs/Qwen3.8-27B-FP8/017b9c7af6b5689d5dd426a76e0bc077e
 CAN_VENDOR="$CAN_PROJECT/dependencies/travel-tools-d0bc2174eea3b3737f6922b89897db4f21ea6f835f7354ee702edbbc9880b3bc"
 CAN_TASKS="$CAN_PROJECT/bootstrap/preparation-33d29710c408fd9851e9de0db5e436cc623b595c/task-data"
 CAN_IDENTITIES="$CAN_PROJECT/bootstrap/preparation-31f9c028bd8615c4b7648144c278ed0d6ffbe56c"
-CAN_INDEPENDENT="$CAN_PROJECT/inputs/calibration-r3-independent-v1"
+CAN_INDEPENDENT="$CAN_PROJECT/inputs/calibration-r3-independent-v2"
 CAN_UPSTREAM=/opt/ai-collusion/sources/MemoryArena
 for CAN_PATH in "$CAN_PROJECT" "$CAN_GLOBAL" "$CAN_CODE" "$CAN_REVIEW" "$CAN_MODEL" "$CAN_VENDOR" "$CAN_TASKS" "$CAN_IDENTITIES" "$CAN_INDEPENDENT" "$CAN_PROJECT/cache" "$CAN_PROJECT/inputs/MemoryArena" "$CAN_PROJECT/inputs/travel-database"; do
  test "$(realpath "$CAN_PATH")" = "$CAN_PATH"
@@ -129,6 +129,14 @@ if [ "$CAN_MODE" = gpu ]; then
   CAN_MOUNTS+=(--mount "type=bind,src=$CAN_PATH,dst=/cycle/$CAN_RUN/$CAN_BASE,readonly")
  done
 else
+ for CAN_SCRIPT in observer grader; do
+  CAN_SCRIPT_FILE=$(jq -r ".independent_cpu_scripts.$CAN_SCRIPT.file" "$CAN_CONFIG")
+  test "$(basename "$CAN_SCRIPT_FILE")" = "$CAN_SCRIPT_FILE"
+  test "$(sha256sum "$CAN_INDEPENDENT/$CAN_SCRIPT_FILE" | cut -d ' ' -f1)" = "$(jq -r ".independent_cpu_scripts.$CAN_SCRIPT.sha256" "$CAN_CONFIG")"
+ done
+ test "$(sha256sum "$CAN_INDEPENDENT/next-version-reference-interface-fixtures.json" | cut -d ' ' -f1)" = "$(jq -r .interface_locks.receipt_fixture_sha256 "$CAN_CONFIG")"
+ test "$(sha256sum "$CAN_INDEPENDENT/calibration-r3-namespace-fixtures.json" | cut -d ' ' -f1)" = "$(jq -r .interface_locks.namespace_fixture_sha256 "$CAN_CONFIG")"
+ test "$(sha256sum "$CAN_INDEPENDENT/calibration-r3-proposal-version-visibility-fixtures.json" | cut -d ' ' -f1)" = "$(jq -r .interface_locks.proposal_visibility_fixture_sha256 "$CAN_CONFIG")"
  CAN_CPU_END=$(($(date +%s)+900))
  if [ "$CAN_CPU_END" -lt "$CAN_END" ]; then CAN_END=$CAN_CPU_END; fi
  CAN_MOUNTS+=(--env NVIDIA_VISIBLE_DEVICES=void --env CUDA_VISIBLE_DEVICES=
@@ -144,7 +152,7 @@ sha256sum "$0" > "$CAN_WORK/launcher.sha256"
 { date -u; free -h; cat /proc/loadavg; df -hT "$CAN_PROJECT"; } > "$CAN_WORK/host-before.txt"
 CAN_COMMAND='exec python3 -m collusion_handoff.calibration_cycle > /work/supervisor.log 2>&1'
 if [ "$CAN_MODE" = cpu ]; then
- CAN_COMMAND='set -e; umask 077; python3 -m unittest discover -s /code/tests -v > /work/unittest.log 2>&1; python3 /code/scripts/probe-structured-output.py > /work/xgrammar.log 2>&1; python3 /code/scripts/probe-calibration-reference-interface.py --references /independent-reference/next-version-reference-interface-fixtures.json --namespace /independent-reference/calibration-r3-namespace-fixtures.json --visibility /independent-reference/calibration-r3-proposal-version-visibility-fixtures.json --output /work/reference-observations.json > /work/reference-observations.log 2>&1; python3 -B /independent-reference/probe_actual_reference_context.py --references /independent-reference/next-version-reference-interface-fixtures.json --namespace /independent-reference/calibration-r3-namespace-fixtures.json --visibility /independent-reference/calibration-r3-proposal-version-visibility-fixtures.json --output /work/independent-context-observations.json > /work/context.log 2>&1; python3 -B /independent-reference/compare_reference_observations.py --references /independent-reference/next-version-reference-interface-fixtures.json --namespace /independent-reference/calibration-r3-namespace-fixtures.json --visibility /independent-reference/calibration-r3-proposal-version-visibility-fixtures.json --factory-observations /work/reference-observations.json --context-observations /work/independent-context-observations.json --output /work/independent-reference-comparison.json > /work/comparison.log 2>&1; exec python3 -m collusion_handoff.calibration_cycle --preflight > /work/preflight.log 2>&1'
+ CAN_COMMAND='set -e; umask 077; python3 -m unittest discover -s /code/tests -v > /work/unittest.log 2>&1; python3 /code/scripts/probe-structured-output.py > /work/xgrammar.log 2>&1; python3 /code/scripts/probe-calibration-reference-interface.py --references /independent-reference/next-version-reference-interface-fixtures.json --namespace /independent-reference/calibration-r3-namespace-fixtures.json --visibility /independent-reference/calibration-r3-proposal-version-visibility-fixtures.json --output /work/reference-observations.json > /work/reference-observations.log 2>&1; python3 -B /independent-reference/probe_actual_reference_context_r3b.py --references /independent-reference/next-version-reference-interface-fixtures.json --namespace /independent-reference/calibration-r3-namespace-fixtures.json --visibility /independent-reference/calibration-r3-proposal-version-visibility-fixtures.json --output /work/independent-context-observations.json > /work/context.log 2>&1; python3 -B /independent-reference/compare_reference_observations_r3b.py --references /independent-reference/next-version-reference-interface-fixtures.json --namespace /independent-reference/calibration-r3-namespace-fixtures.json --visibility /independent-reference/calibration-r3-proposal-version-visibility-fixtures.json --factory-observations /work/reference-observations.json --context-observations /work/independent-context-observations.json --output /work/independent-reference-comparison.json > /work/comparison.log 2>&1; exec python3 -m collusion_handoff.calibration_cycle --preflight > /work/preflight.log 2>&1'
 else
  CAN_INTENT="$CAN_CHILD/launch-intent-$CAN_PHASE.json"
  test ! -e "$CAN_INTENT"

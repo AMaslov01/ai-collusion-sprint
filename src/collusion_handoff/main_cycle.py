@@ -264,6 +264,8 @@ def continuation_group(prefix_job, packages, manifest, config, base, budget, wor
     prefix = BranchRunner(protocol, load_prompts(config), config["limits"], None, base=None,
                           histories=deepcopy(snapshot["histories"]), private_goals=None,
                           accounting=lambda ids: ledger_accounting(budget, ids),
+                          private_goal_message_role=config["protocol"].get("private_goal_message_role", "user"),
+                          private_goal_serialization=config["protocol"].get("private_goal_serialization", "separate_message"),
                           symbolic_reference_binding=config["protocol"].get("symbolic_reference_binding", False))
     arms = manifest["sample"]["arms"]
     order = sorted(arms, key=lambda arm: fingerprint([config["run_id"], number, base["generation"]["seed"], arm]))
@@ -360,6 +362,7 @@ def preflight(manifest, config, base, assets, phase, *, code, review, root, work
                 private = {role: (code / config["protocol"]["private_" + role + "_prompt"]).read_text() for role in ("A", "B")} if manifest["sample"]["prefix_condition_by_group"][str(number)] == "private_goal_induction" else {}
                 runner = BranchRunner(protocol, load_prompts(config), config["limits"], None, base=group["base_person"], private_goals=private,
                     private_goal_message_role=config["protocol"].get("private_goal_message_role", "user"),
+                    private_goal_serialization=config["protocol"].get("private_goal_serialization", "separate_message"),
                     symbolic_reference_binding=config["protocol"].get("symbolic_reference_binding", False))
                 task = group["tasks"][0]
                 protocol.issue(task)
