@@ -110,8 +110,8 @@ if [ "$CAN_MODE" = gpu ]; then
  CAN_END=$((CAN_END-30))
  if [ "$CAN_SERVICE_END" -lt "$CAN_END" ]; then CAN_END=$CAN_SERVICE_END; fi
  printf '%s\n' "$CAN_END" > "$CAN_GLOBAL/gpu-service-deadline.unix"
- jq -n --argjson global "$CAN_USED" --argjson child "$CAN_CHILD_USED" --argjson end "$CAN_END" \
-  '{previous_global_allocated_seconds:$global,previous_child_allocated_seconds:$child,phase_deadline_unix:$end,child_cap_seconds:5400,global_cap_seconds:14400,shutdown_reserve_seconds:30}' > "$CAN_CHILD/admission-$CAN_PHASE.json"
+ jq -n --argjson global "$CAN_USED" --argjson child "$CAN_CHILD_USED" --argjson deadline "$CAN_END" \
+  '{previous_global_allocated_seconds:$global,previous_child_allocated_seconds:$child,phase_deadline_unix:$deadline,child_cap_seconds:5400,global_cap_seconds:14400,shutdown_reserve_seconds:30}' > "$CAN_CHILD/admission-$CAN_PHASE.json"
  CAN_NETWORK=host
  CAN_ROOT_SUFFIX=
  CAN_WORK="$CAN_CHILD/$CAN_PHASE"
