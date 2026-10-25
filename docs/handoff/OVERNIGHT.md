@@ -13,9 +13,17 @@ the old GPU3/4-only authorization. It does not turn an unseen hash into a
 human-approved hash. Record the human delegation and later agent-reviewed freeze
 as distinct records. The existing DEV cutoff and budget remain unchanged.
 
+Current calibration pointer: [calibration-r4.md](../../prompts/diagnostics/calibration-r4.md).
+R3 finished technically, but both independently sealed source-only reviews found
+no harmful pact in worlds8/9. Its dependent memory stage stops. One separately
+frozen operative-role repair on the SAME worlds is prepared under the residual
+global DEV budget; no further escalation follows a negative r4. Root/Diagnosis
+review seals are4754f129…/9c03e5e8…, preserved before reconciliation. Fresh stage
+and receipt paths are in results/overnight-coordination/state.json.
+
 ## Execution sequence and completion criteria
 
-1. Finish the fixed calibration-r3 block, including the actual pinned-tokenizer
+1. Finish the fixed current calibration block, including the actual pinned-tokenizer
    wire checks, server CPU tests, independent source-only reviews, bounded
    prefix/handoff dispatches, final coverage/replay/cost checks. Preserve all
    failures. Ready means the pipeline measures the intended intervention and an
