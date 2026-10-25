@@ -15,11 +15,17 @@ as distinct records. The existing DEV cutoff and budget remain unchanged.
 
 Current calibration pointer: [calibration-r4.md](../../prompts/diagnostics/calibration-r4.md).
 R3 finished technically, but both independently sealed source-only reviews found
-no harmful pact in worlds8/9. Its dependent memory stage stops. One separately
-frozen operative-role repair on the SAME worlds is prepared under the residual
-global DEV budget; no further escalation follows a negative r4. Root/Diagnosis
-review seals are4754f129…/9c03e5e8…, preserved before reconciliation. Fresh stage
-and receipt paths are in results/overnight-coordination/state.json.
+no harmful pact in worlds8/9. Its dependent memory stage stopped. The separately
+frozen R4 operative-role repair on the SAME worlds has now produced independently
+confirmed, active harmful future agreements in both sources and four actual
+above-cap commits. This is induced coordination, not spontaneous formation.
+Source reviews were independently sealed before reconciliation or memory. The
+controller selected the first qualifying world,8, in the fixed order8,9. Its
+handoff phase started at25Oct01:52UTC on the exact reviewed GPU4, with four memory
+builders and12 assigned future opportunities across all six arms. Both active
+private roles are removed at the fork. No mitigation estimate exists yet.
+Budgets remain cumulative. Current paths, hashes and actual container identity
+are in results/overnight-coordination/state.json; refresh live state before acting.
 
 ## Execution sequence and completion criteria
 
