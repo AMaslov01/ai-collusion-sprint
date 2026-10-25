@@ -22,10 +22,40 @@ class CalibrationFailurePathTests(unittest.TestCase):
             return preflight / text.removeprefix("/preflight").lstrip("/") if text.startswith("/preflight") else Path(value)
         return mapped
 
+    def test_truncated_ledger_keeps_original_failure_durable_result_and_unknown_remaining_outcomes(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            preflight, work, global_root = root / "preflight", root / "work", root / "global"
+            assigned = [{"group_id": number, "traveler_index": index, "task_id": f"g{number}-t{index}"}
+                        for number in (8, 9) for index in (1, 2)]
+            atomic_json(preflight / "assigned-prefix-opportunities.json", assigned)
+            durable = {"task_id": "g8-t1", "status": "synthetic_durable_result", "evaluation": {"H": 1, "U": 0, "Q": None}}
+            atomic_json(work / "prefix/group-8/results/g8-t1.json", durable)
+            (global_root / "ledger").mkdir(parents=True)
+            ledger = global_root / "ledger/requests.jsonl"
+            truncated = b'{"logical_call_id":'
+            ledger.write_bytes(truncated)
+            amendment = {"run_id": "synthetic-calibration", "phases": {"prefix": "synthetic-prefix"}}
+            with patch.object(cycle, "Path", side_effect=self.path_mapper(preflight)), patch.object(cycle, "ROOT", global_root):
+                cycle.initialize_assigned_outputs({"selected_worlds": [8, 9]}, work, prefix=True)
+                cycle.record_supervisor_failure(amendment, "synthetic-prefix", work, "Original startup failure")
+            report = read_json(work / "all-assigned-results.json")
+            self.assertEqual(report["supervisor_failure"], "Original startup failure")
+            self.assertIn("Truncated", report["accounting_error"])
+            self.assertEqual(report["observed"][0]["result"], durable)
+            for row in report["observed"][1:]:
+                self.assertEqual(row["result"]["status"], "measurement_corruption")
+                self.assertIsNone(row["result"]["model_calls"])
+                self.assertEqual(row["result"]["evaluation"], {"H": None, "U": None, "Q": None})
+                self.assertEqual(row["result"]["reason"], "Original startup failure")
+            self.assertEqual(ledger.read_bytes(), truncated)
+
     def test_prefix_model_startup_failure_keeps_all_four_expected_tasks_and_reason(self):
         with TemporaryDirectory() as temporary:
             root = Path(temporary)
             preflight, work, global_root = root / "preflight", root / "work", root / "global"
+            (global_root / "ledger").mkdir(parents=True)
+            (global_root / "ledger/requests.jsonl").write_bytes(b"")
             assigned = [{"group_id": number, "traveler_index": index, "task_id": f"g{number}-t{index}"}
                         for number in (8, 9) for index in (1, 2)]
             atomic_json(preflight / "assigned-prefix-opportunities.json", assigned)
@@ -46,6 +76,8 @@ class CalibrationFailurePathTests(unittest.TestCase):
         with TemporaryDirectory() as temporary:
             root = Path(temporary)
             preflight, work, global_root = root / "preflight", root / "work", root / "global"
+            (global_root / "ledger").mkdir(parents=True)
+            (global_root / "ledger/requests.jsonl").write_bytes(b"")
             tasks = []
             for index in range(1, 5):
                 task = fixture_task(f"g9-t{index}")

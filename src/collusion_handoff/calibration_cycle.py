@@ -63,7 +63,9 @@ def record_supervisor_failure(amendment, phase, directory, reason):
     report = read_json(path)
     report["supervisor_failure"] = reason
     if report["measurement_status"] == "pending_client_finalization":
-        requests = journal(ROOT / "ledger/requests.jsonl")
+        requests, accounting_error = failure_accounting()
+        if accounting_error:
+            report["accounting_error"] = accounting_error
         for row in report["observed"]:
             prefix = phase == amendment["phases"]["prefix"]
             branch = namespace(amendment["run_id"], row["group_id"], "prefix" if prefix else "recipient/" + row["arm"])
@@ -71,10 +73,9 @@ def record_supervisor_failure(amendment, phase, directory, reason):
             if task_path.exists():
                 row["result"] = read_json(task_path)
                 continue
-            calls = sum(request["logical_call_id"].startswith(branch + "/" + row["task_id"] + "/") for request in requests)
-            row["result"] = {"task_id": row["task_id"], "status": "interrupted_before_durable_task_result" if calls else "not_run_after_supervisor_failure",
-                "reason": reason, "model_calls": calls, "evaluation": {"H": None, "U": None, "Q": None},
-                "event_recovery_required_before_outcome_claim": bool(calls)}
+            row["result"] = unfinished_result(row["task_id"], branch, requests, reason, accounting_error)
+            if row["result"]["status"] == "not_run_after_phase_failure":
+                row["result"]["status"] = "not_run_after_supervisor_failure"
         report["measurement_status"] = "supervisor_failed_with_all_assigned_statuses"
     atomic_json(path, report)
     status_path = directory / "phase-status.json"
@@ -83,11 +84,24 @@ def record_supervisor_failure(amendment, phase, directory, reason):
     atomic_json(status_path, status)
 
 
-def unfinished_result(task_id, branch, requests, reason):
-    calls = sum(row["logical_call_id"].startswith(branch + "/" + task_id + "/") for row in requests)
-    return {"task_id": task_id, "status": "interrupted_before_durable_task_result" if calls else "not_run_after_phase_failure",
+def failure_accounting():
+    try:
+        path = ROOT / "ledger/requests.jsonl"
+        require(path.is_file(), "Missing global requests journal during failure recovery")
+        rows = journal(path)
+        require(all(isinstance(row, dict) and isinstance(row.get("logical_call_id"), str) for row in rows),
+                "Unreadable logical identities in global requests journal")
+        return rows, None
+    except Exception:
+        return None, traceback.format_exc()
+
+
+def unfinished_result(task_id, branch, requests, reason, accounting_error=None):
+    calls = None if requests is None else sum(row["logical_call_id"].startswith(branch + "/" + task_id + "/") for row in requests)
+    return {"task_id": task_id, "status": "measurement_corruption" if requests is None else
+            "interrupted_before_durable_task_result" if calls else "not_run_after_phase_failure",
             "reason": reason, "model_calls": calls, "evaluation": {"H": None, "U": None, "Q": None},
-            "event_recovery_required_before_outcome_claim": bool(calls)}
+            "accounting_error": accounting_error, "event_recovery_required_before_outcome_claim": requests is None or bool(calls)}
 
 
 def settings():
@@ -429,13 +443,13 @@ def run_client(amendment, effective, base, assets, closure, pre):
             failure = traceback.format_exc()
             raise
         finally:
-            requests = journal(ROOT / "ledger/requests.jsonl")
+            requests, accounting_error = failure_accounting()
             if phase == amendment["phases"]["prefix"]:
                 for number in pre["selected_worlds"]:
                     for index in (1, 2):
                         path = WORK / f"prefix/group-{number}/results/g{number}-t{index}.json"
                         if not path.exists():
-                            atomic_json(path, unfinished_result(f"g{number}-t{index}", namespace(effective["run_id"], number, "prefix"), requests, failure))
+                            atomic_json(path, unfinished_result(f"g{number}-t{index}", namespace(effective["run_id"], number, "prefix"), requests, failure, accounting_error))
                         report.append({"group_id": number, "traveler_index": index, "result": read_json(path)})
             elif (WORK / "assigned-future-opportunities.json").exists():
                 for item in read_json(WORK / "assigned-future-opportunities.json"):
@@ -443,13 +457,24 @@ def run_client(amendment, effective, base, assets, closure, pre):
                     branch = namespace(effective["run_id"], number, "recipient/" + item["arm"])
                     path = WORK / f"continuations/group-{number}" / branch / "results" / (task["task_id"] + ".json")
                     if not path.exists():
-                        atomic_json(path, unfinished_result(task["task_id"], branch, requests, failure))
+                        atomic_json(path, unfinished_result(task["task_id"], branch, requests, failure, accounting_error))
                     report.append({**item, "result": read_json(path)})
             atomic_json(WORK / "all-assigned-results.json", {"assigned": len(report), "observed": report,
-                        "measurement_status": "client_finalized_with_explicit_statuses"})
-            atomic_json(WORK / "phase-status.json", {"status": "failed_with_all_assigned_statuses" if failure else "finished_with_explicit_statuses",
-                "failure": failure, "global_budget": budget.state(), "child_budget": budget.child_state(), "main_started": False})
-            verify_parent(ROOT, closure, effective)
+                        "measurement_status": "client_finalized_with_explicit_statuses", "accounting_error": accounting_error})
+            accounting_errors = [accounting_error] if accounting_error else []
+            states = {}
+            for name, check in (("global_budget", budget.state), ("child_budget", budget.child_state),
+                                ("parent_integrity", lambda: verify_parent(ROOT, closure, effective))):
+                try:
+                    states[name] = check()
+                except Exception:
+                    error = traceback.format_exc()
+                    states[name] = {"status": "accounting_or_integrity_failure", "error": error}
+                    accounting_errors.append(error)
+            atomic_json(WORK / "phase-status.json", {"status": "failed_with_all_assigned_statuses" if failure or accounting_errors else "finished_with_explicit_statuses",
+                "failure": failure, "accounting_errors": accounting_errors, **states, "main_started": False})
+            if accounting_errors and not failure:
+                require(False, "Calibration accounting/integrity failure; see preserved phase-status.json")
 
 
 def main():
