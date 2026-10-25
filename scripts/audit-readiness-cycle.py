@@ -16,6 +16,14 @@ from unittest.mock import patch
 from types import SimpleNamespace
 
 
+def admission_phase_stop(result):
+    detail = result.get("failure") or {}
+    if detail.get("type") != "AdmissionFailure" or detail.get("kind") not in {
+            "budget_exhausted", "phase_stopped", "context_overflow", "timeout", "tool_error"}:
+        raise RuntimeError("Unimplemented typed admission failure replay")
+    return detail["kind"] in {"budget_exhausted", "phase_stopped"}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--completed", required=True, type=Path)
@@ -24,6 +32,10 @@ def main():
     parser.add_argument("--cycle", type=Path)
     parser.add_argument("--model", type=Path, default=Path("/model"))
     parser.add_argument("--catalog-csv", type=Path, default=Path("/database/accommodations/clean_accommodations_2022.csv"))
+    parser.add_argument("--calibration-contract", type=Path, help="Explicit frozen calibration prefix-only profile")
+    parser.add_argument("--calibration-review", type=Path)
+    parser.add_argument("--calibration-preflight", type=Path)
+    parser.add_argument("--sealed-source-review", type=Path, action="append", default=[])
     args = parser.parse_args()
     if os.getuid() == 0 or not Path("/.dockerenv").exists():
         raise RuntimeError("Requires non-root CPU Docker")
@@ -56,14 +68,40 @@ def main():
         return [strict_json(line) for line in data.decode().splitlines()]
 
     phase = read_json(completed / "phase-manifest.json")
-    require(phase["phase"] in {"hardware-and-development-prefix-v1", "validation-prefix-v1", "validation-continuations-v1"},
+    calibration = args.calibration_contract is not None
+    cycle = args.cycle.resolve() if args.cycle else completed.parent
+    require(calibration or phase["phase"] in {"hardware-and-development-prefix-v1", "validation-prefix-v1", "validation-continuations-v1"},
             "Unimplemented replay profile; do not claim a pass")
     development = phase["phase"] == "hardware-and-development-prefix-v1"
     continuation = phase["phase"] == "validation-continuations-v1"
     config = read_json(code / "configs/readiness-cycle-v5.json")
+    contract_path = code / "configs/readiness-cycle-v5.json"
+    if calibration:
+        from collusion_handoff import calibration_cycle
+        require(args.calibration_review and args.calibration_preflight and os.environ.get("CUDA_VISIBLE_DEVICES") == "" and
+                not list(Path("/dev").glob("nvidia[0-9]*")) and {p.name for p in Path("/sys/class/net").iterdir()} == {"lo"},
+                "Calibration replay requires explicit CPU-only review/preflight inputs")
+        contract_path = args.calibration_contract.resolve()
+        require(contract_path.is_relative_to(code), "Calibration contract is outside the frozen inference checkout")
+        with patch.object(calibration_cycle, "CODE", code), patch.object(calibration_cycle, "ROOT", cycle), \
+             patch.object(calibration_cycle, "REVIEW", args.calibration_review.resolve()), \
+             patch.object(calibration_cycle, "CONFIG", str(contract_path.relative_to(code))), \
+             patch.dict(os.environ, {"ADAPTER_COMMIT": phase["code_commit"], "CYCLE_PHASE": phase["phase"]}):
+            amendment, config, _, _, closure = calibration_cycle.settings()
+            require(phase["phase"] == amendment["phases"]["prefix"], "Calibration profile replays prefixes only")
+            effective_assets = {stage: {"prompt": (code / spec["prompt"]).read_text(), "schema": read_json(code / spec["schema"])}
+                                for stage, spec in config["memory"]["stages"].items()}
+            require(phase == calibration_cycle.phase_identity(amendment, config, read_json(code / config["base_runtime_config"]), effective_assets),
+                    "Calibration phase differs from the frozen effective identity")
+        calibration_preflight = read_json(args.calibration_preflight / "preflight.json")
+        require(calibration_preflight["status"] == "passed_no_model_calls" and calibration_preflight["identity"] == phase,
+                "Actual calibration CPU preflight differs")
     base = read_json(code / config["base_runtime_config"])
     selected = (config["selection"]["developmental_nominal_groups"] + config["selection"]["developmental_induced_groups"]
                 if development else config["selection"]["independent_validation_induced_groups"])
+    if calibration:
+        selected = calibration_preflight["selected_worlds"]
+        require(selected == read_json(completed / "assignment.json")["selected_worlds"], "Frozen calibration source order changed")
     smoke_spec = config.get("resource_smoke")
     smoke_spec = smoke_spec if smoke_spec and smoke_spec["phase"] == phase["phase"] else None
     hardware_active = development or smoke_spec is not None
@@ -72,14 +110,14 @@ def main():
     hardware_prefix = smoke_spec["logical_prefix"] + "/" if smoke_spec else "hardware-and-development-prefix-v1/"
     actor_prefixes = tuple(abe_cycle.namespace(config["run_id"], number, role) + "/" for number in selected
                            for role in (["recipient/" + arm for arm in config["selection"]["arms"]] if continuation else ["prefix"]))
-    require(phase["config_sha256"] == sha256((code / "configs/readiness-cycle-v5.json").read_bytes()).hexdigest(), "Inference config changed")
+    require(phase["config_sha256"] == sha256(contract_path.read_bytes()).hexdigest(), "Inference config changed")
     assets = {stage: {"prompt": (code / spec["prompt"]).read_text(), "schema": read_json(code / spec["schema"])}
               for stage, spec in config["memory"]["stages"].items()}
     require(fingerprint(assets) == phase["assets_sha256"], "Inference assets changed")
-    require(config["limits"] == phase["limits"] and config["allocations"] == phase["allocations"], "Phase ceilings changed")
-    require(config["operations"] == phase["operational_hardware"], "Hardware identity changed")
+    require(config["limits"] == phase["global_limits" if calibration else "limits"] and
+            config["allocations"] == phase["global_allocations" if calibration else "allocations"], "Phase ceilings changed")
+    require(config["operations"] == phase["operations" if calibration else "operational_hardware"], "Hardware identity changed")
     output.mkdir(mode=0o700, parents=True)
-    cycle = args.cycle.resolve() if args.cycle else completed.parent
     requests, responses = rows(cycle / "ledger/requests.jsonl"), rows(cycle / "ledger/responses.jsonl")
     by_request = {row["logical_call_id"]: row for row in requests}
     by_response = {row["logical_call_id"]: row for row in responses}
@@ -173,7 +211,7 @@ def main():
         saved_results = {task["task_id"]: read_json(job / "results" / (task["task_id"] + ".json")) for task in group["tasks"][:2]}
         replayed_results = {}
         protocol = Protocol(number, abe_cycle.namespace(config["run_id"], number, "prefix"), catalog)
-        private = {role: (code / config["protocol"]["private_" + role + "_prompt"]).read_text() for role in ("A", "B")} if number in config["selection"]["developmental_induced_groups"] or number in config["selection"]["independent_validation_induced_groups"] else {}
+        private = {role: (code / config["protocol"]["private_" + role + "_prompt"]).read_text() for role in ("A", "B")} if calibration or number in config["selection"]["developmental_induced_groups"] or number in config["selection"]["independent_validation_induced_groups"] else {}
 
         require(read_json(job / "status.json")["induced"] == bool(private), "Prefix induction status differs")
         expected_origins = {role: {"origin_event_id": protocol.branch_id + "/private-input-" + role,
@@ -188,7 +226,7 @@ def main():
                 failed = saved_results[protocol.task["task_id"]]
                 detail = failed.get("failure") or {}
                 if detail.get("type") == "AdmissionFailure":
-                    raise AdmissionFailure(detail["message"], kind=detail["kind"], stop_phase=failed["status"] == "phase_stopped")
+                    raise AdmissionFailure(detail["message"], kind=detail["kind"], stop_phase=admission_phase_stop(failed))
                 raise AuditMismatch("No cached generation and no declared admission failure")
             response = cached_response(body, logical_id, job)
             text = readiness_cycle.content(response)
@@ -204,9 +242,10 @@ def main():
                 if by_response.get(row["logical_call_id"], {}).get("accounted_actual_tokens") is not None
                 else row["reserved_input_output_tokens"] for row in selected), "unknown_spend_requests": missing}
 
+        options = {key: config["protocol"][key] for key in ("private_goal_message_role", "private_goal_serialization", "symbolic_reference_binding")} if calibration else {}
         runner = BranchRunner(protocol, prompts, config["limits"], generate,
                               base=group["base_person"], private_goals=private,
-                              persist=replayed_results.__setitem__, accounting=accounting)
+                              persist=replayed_results.__setitem__, accounting=accounting, **options)
         for task in group["tasks"][:2]:
             if saved_results[task["task_id"]]["status"] == "not_run_after_phase_failure":
                 continue
@@ -221,6 +260,9 @@ def main():
         require(runner.histories == snapshot["histories"] and protocol.commits == snapshot["commits"]
                 and protocol.events == snapshot["events"], "Replayed actor/world/events state differs")
         require(runner.requests == read_json(job / "actual-requests.json"), "Replayed actual message/origin requests differ")
+        if calibration:
+            require(runner.requests[0]["payload"] == read_json(args.calibration_preflight / "actor-wire-probes.json")[str(number)]["request"],
+                    "First actual calibration actor wire differs from CPU")
         source = runner.source({"catalog_version": config["task_policy"]["catalog_csv_sha256"], "code_commit": phase["code_commit"]})
         require(source == read_json(job / "source.json"), "Source-policy projection differs")
         require(rows(job / "events.jsonl") == protocol.events, "Append-only on-disk events differ")
@@ -251,7 +293,7 @@ def main():
                     failed = saved[logical_id.split("/")[1]]
                     detail = failed.get("failure") or {}
                     if detail.get("type") == "AdmissionFailure":
-                        raise AdmissionFailure(detail["message"], kind=detail["kind"], stop_phase=failed["status"] == "phase_stopped")
+                        raise AdmissionFailure(detail["message"], kind=detail["kind"], stop_phase=admission_phase_stop(failed))
                     raise AuditMismatch("No cached continuation and no declared admission failure")
                 response = cached_response(body, logical_id, actual_job)
                 text, usage = readiness_cycle.content(response), response.json()["usage"]
@@ -278,6 +320,23 @@ def main():
     for number in selected:
         operation = continuations if continuation else prefix
         check(f"group-{number}", lambda number=number: operation(number))
+    if calibration:
+        def assigned_prefix_audit():
+            assigned = read_json(completed / "assigned-prefix-opportunities.json")
+            expected = {(number, index) for number in selected for index in (1, 2)}
+            require(len(assigned) == len(expected) and {(row["group_id"], row["traveler_index"]) for row in assigned} == expected,
+                    "Assigned calibration prefix matrix differs")
+            aggregate = read_json(completed / "all-assigned-results.json")
+            require(aggregate["assigned"] == len(expected) and len(aggregate["observed"]) == len(expected), "Prefix denominator changed")
+            observed = set()
+            for row in aggregate["observed"]:
+                key = (row["group_id"], row["traveler_index"])
+                require(key in expected and key not in observed, "Duplicate/unassigned prefix result")
+                observed.add(key)
+                require(row["result"] == read_json(completed / f"prefix/group-{key[0]}/results/g{key[0]}-t{key[1]}.json"),
+                        "Prefix aggregate differs from the replayed durable result")
+            return {"status": "passed", "assigned_tasks": len(expected)}
+        check("assigned-prefix-matrix", assigned_prefix_audit)
     if continuation:
         def assigned_audit():
             assigned = read_json(completed / "assigned-future-opportunities.json")
@@ -308,6 +367,14 @@ def main():
               "allocations": allocations, "unknown_spend_requests": unknown, "checks": results, "errors": errors,
               "hardware": config["operations"], "parent_runs": config["parent_runs"], "main_started": False,
               "human_gold": False}
+    if calibration:
+        report["calibration_audit_profile"] = {
+            "contract_sha256": sha256(contract_path.read_bytes()).hexdigest(),
+            "preflight_sha256": sha256((args.calibration_preflight / "preflight.json").read_bytes()).hexdigest(),
+            "audit_script_sha256": sha256(Path(__file__).read_bytes()).hexdigest(),
+            "sealed_source_review_sha256": {str(path): sha256(path.read_bytes()).hexdigest() for path in args.sealed_source_review},
+            "global_ledger_sha256": {name: sha256((cycle / "ledger" / name).read_bytes()).hexdigest() for name in ("requests.jsonl", "responses.jsonl")},
+            "selected_worlds": selected, "parent_closure_sha256": phase["parent_closure_sha256"]}
     atomic_json(output / "audit.json", report)
     print(canonical({"status": report["status"], "replayed_calls": len(consumed), "errors": len(errors), "new_model_calls": 0}).decode())
     if errors:
