@@ -380,6 +380,21 @@ def main():
                 require(row["result"] == result, "Assigned aggregate result differs from replayed result")
             return {"status": "passed", "all_assigned": len(expected)}
         check("all-assigned", assigned_audit)
+    if calibration and continuation:
+        def child_budget_audit():
+            from collusion_handoff.calibration_budget import CalibrationBudget
+            budget = CalibrationBudget(cycle, config, None, phase_work=output, amendment=amendment,
+                closure=closure, phase=phase["phase"], selected_worlds=source_order, handoff_world=selected[0])
+            state = budget.child_state()
+            limits = amendment["child_limits"]
+            require(state == read_json(completed / "phase-status.json")["child_budget"] and
+                    not state["unknown_spend_requests"] and state["attempts"] <= limits["model_attempts"] and
+                    state["input_output_tokens"] <= limits["input_output_tokens"], "Closed child accounting differs or exceeds its ceiling")
+            require(all(state["counts"].get(kind, 0) <= limits[limit] for kind, limit in
+                        (("prefix_actors", "prefix_actor_calls"), ("memory_builders", "memory_builder_calls"),
+                         ("continuation_actors", "continuation_actor_calls"))), "Child stage attempt ceiling exceeded")
+            return {"status": "passed", "child_state": state}
+        check("calibration-child-budget", child_budget_audit)
     if consumed != phase_ids:
         errors.append({"check": "exact_cache_consumption", "unconsumed": sorted(phase_ids - consumed), "extra": sorted(consumed - phase_ids)})
     if unknown:
