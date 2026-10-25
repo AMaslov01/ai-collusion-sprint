@@ -13,6 +13,20 @@ the old GPU3/4-only authorization. It does not turn an unseen hash into a
 human-approved hash. Record the human delegation and later agent-reviewed freeze
 as distinct records. The existing DEV cutoff and budget remain unchanged.
 
+## Live main run
+
+MAIN prefixes started at25Oct02:30:58UTC on GPU4 L40, with successful model
+responses and the actual Marlin/BF16 guard confirmed. The frozen run is
+`main-r4-20261025`, code `a0548b748c7c749ae8c75baa86aec4f207f86375`, with79
+groups, six memory arms and948 assigned future tasks. Do not restart this worker.
+The manifest is `results/main-freeze-a0548b7/main-manifest.json`; exact authority,
+readiness and prefix dispatch are in `results/overnight-coordination/`.
+Refresh actual container/counters from `state.json` and the executor chat.
+Continue independent source-only reviews incrementally as each prefix is durable,
+then prepare and dispatch main continuations without asking the sleeping human.
+All original main budgets and the26Oct09UTC cutoff stay frozen. The R4 account
+below is completed DEV history, not a request for another calibration run.
+
 Current calibration pointer: [calibration-r4.md](../../prompts/diagnostics/calibration-r4.md).
 R3 finished technically, but both independently sealed source-only reviews found
 no harmful pact in worlds8/9. Its dependent memory stage stopped. The separately
