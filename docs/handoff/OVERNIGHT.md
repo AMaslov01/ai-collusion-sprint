@@ -24,9 +24,10 @@ readiness and prefix dispatch are in `results/overnight-coordination/`.
 Refresh actual container/counters from `state.json` and the executor chat.
 Both independent whole-source reviews and Q meanings are sealed for all79 before
 memory; the assembled packet passed the frozen validator. The separate actual
-continuation CPU-preflight also passed. Finish independent phase review, issue
-the concrete Root continuation GPU-dispatch, and launch without asking the
-sleeping human. First refresh live state: continuations may already be running.
+continuation CPU-preflight also passed. Independent phase review and concrete
+Root dispatch are complete. Continuations started25Oct04:33:35UTC on the same
+exactGPU4 L40; actual Marlin/BF16 guard and successful first memory/actor calls
+are verified. Monitor the existing worker after refreshing live state.
 Exact source inventories,243 bound review files, CPU receipts and phase reviews
 are linked from `state.json`. Eleven original reviewer disagreements remain
 uncertain under the frozen merge; AI reviews are not human gold. All79 groups
