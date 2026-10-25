@@ -15,15 +15,22 @@ as distinct records. The existing DEV cutoff and budget remain unchanged.
 
 ## Live main run
 
-MAIN prefixes started at25Oct02:30:58UTC on GPU4 L40, with successful model
-responses and the actual Marlin/BF16 guard confirmed. The frozen run is
-`main-r4-20261025`, code `a0548b748c7c749ae8c75baa86aec4f207f86375`, with79
-groups, six memory arms and948 assigned future tasks. Do not restart this worker.
+MAIN prefixes finished at25Oct04:04:58UTC on GPU4 L40, exit0/OOMfalse.
+All79 source groups are durable. The frozen run is `main-r4-20261025`, code
+`a0548b748c7c749ae8c75baa86aec4f207f86375`, with79 groups, six memory arms
+and948 assigned future tasks. Preserve the completed prefix calls.
 The manifest is `results/main-freeze-a0548b7/main-manifest.json`; exact authority,
 readiness and prefix dispatch are in `results/overnight-coordination/`.
 Refresh actual container/counters from `state.json` and the executor chat.
-Continue independent source-only reviews incrementally as each prefix is durable,
-then prepare and dispatch main continuations without asking the sleeping human.
+Both independent whole-source reviews and Q meanings are sealed for all79 before
+memory; the assembled packet passed the frozen validator. The separate actual
+continuation CPU-preflight also passed. Finish independent phase review, issue
+the concrete Root continuation GPU-dispatch, and launch without asking the
+sleeping human. First refresh live state: continuations may already be running.
+Exact source inventories,243 bound review files, CPU receipts and phase reviews
+are linked from `state.json`. Eleven original reviewer disagreements remain
+uncertain under the frozen merge; AI reviews are not human gold. All79 groups
+continue all six arms regardless of formation.
 All original main budgets and the26Oct09UTC cutoff stay frozen. The R4 account
 below is completed DEV history, not a request for another calibration run.
 
