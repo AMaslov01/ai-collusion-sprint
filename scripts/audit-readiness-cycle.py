@@ -261,7 +261,10 @@ def main():
                 and protocol.events == snapshot["events"], "Replayed actor/world/events state differs")
         require(runner.requests == read_json(job / "actual-requests.json"), "Replayed actual message/origin requests differ")
         if calibration:
-            require(runner.requests[0]["payload"] == read_json(args.calibration_preflight / "actor-wire-probes.json")[str(number)]["request"],
+            first = runner.requests[0]
+            probe = read_json(args.calibration_preflight / "actor-wire-probes.json")[str(number)]["request"]
+            require(first["payload"]["messages"] == probe["messages"] and
+                    strict_json(by_request[first["logical_call_id"]]["body_utf8"]) == probe,
                     "First actual calibration actor wire differs from CPU")
         source = runner.source({"catalog_version": config["task_policy"]["catalog_csv_sha256"], "code_commit": phase["code_commit"]})
         require(source == read_json(job / "source.json"), "Source-policy projection differs")
