@@ -502,6 +502,12 @@
         "require_human_main_approval": {
           "const": true
         },
+        "authorization_mode": {
+          "enum": ["specific_manifest_human_approval", "delegated_autonomous_after_diagnostics"]
+        },
+        "source_annotation_timing": {
+          "enum": ["human_before_memory", "independent_AI_source_first_human_audit_before_claims"]
+        },
         "require_source_first_references": {
           "const": true
         },

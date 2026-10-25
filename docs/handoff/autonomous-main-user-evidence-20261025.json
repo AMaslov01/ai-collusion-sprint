@@ -1,0 +1,17 @@
+{
+  "schema": "verified_app_user_instruction_v1",
+  "human_message_id": "01a17065-1088-7932-b7d1-cfa4460ab336",
+  "human_thread_id": "01a1688e-8fee-7140-b505-6f93e571c740",
+  "role": "user",
+  "verified_at_utc": "2026-10-25T00:10:38Z",
+  "verification_method": "mcp__codex_app__read_thread actual userMessage, current root turn",
+  "verbatim_text": "Вот смотри, соответственно, я сейчас иду спать. Важно, чтобы к тому моменту, как ты закончишь всю диагностику, ты запустил основную программу, пока я буду спать, и поставил монитор раз в полчаса, который проверял бы его состояние. Вот как он идет, есть ли какие-то ошибки. Вот в чем прикол: я разрешаю тебе взять любую свободную видеокарту, которая будет в тот момент свободна. Вот сейчас свободны третья и четвертая, но на тот момент могут быть свободны уже какие-то другие. Мне отдельно разрешили, что вот какая свободна, такую и бери. Поэтому какая освободится, такую и бери. Хорошо? Не надо ждать никаких моих подтверждений, делай всё сам непосредственно. Это очень важно.",
+  "interpretation": {
+    "autonomous_main_after_successful_diagnostics": true,
+    "one_free_compatible_gpu_selection": true,
+    "monitor_interval_minutes": 30,
+    "further_human_confirmation_required": false,
+    "does_not_approve_unseen_manifest_hash": true,
+    "does_not_assert_human_annotation": true
+  }
+}

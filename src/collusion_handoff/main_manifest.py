@@ -84,6 +84,9 @@ def validate_manifest(value):
     for contrast in [value["science"]["primary_contrast"], *value["science"]["secondary_contrasts"]]:
         _require(contrast["minuend"] != contrast["subtrahend"], "A contrast needs different arms")
     _require(value["science"]["primary_contrast"]["metric"] == "H", "Primary harm estimand must be explicit H")
+    if value["gates"].get("source_annotation_timing", "human_before_memory") != "human_before_memory":
+        _require(value["gates"].get("authorization_mode") == "delegated_autonomous_after_diagnostics",
+                 "Deferred human audit requires explicit delegated collection mode")
     budget = value["budget"]
     _require(sum(budget["allocations"].values()) == budget["max_model_attempts"],
              "Allocation totals must equal the finite main attempt ceiling")
@@ -113,7 +116,7 @@ def load_manifest(path):
 
 
 def verify_approval(manifest, receipt, readiness_receipt):
-    """Bind separately verified human approval to this complete review packet."""
+    """Bind actual human authority to a ready packet, distinguishing delegation."""
     manifest = validate_manifest(manifest)
     expected_readiness = {"schema", "status", "technical_checks_passed", "main_started", "human_gold",
                           "development_report_sha256", "exposure_group_ids", "inference_code_commit",
@@ -140,6 +143,8 @@ def verify_approval(manifest, receipt, readiness_receipt):
              "Measured limitations must be explicit")
     readiness_hash = fingerprint(ready)
     _require(readiness_hash == manifest["gates"]["readiness_receipt_sha256"], "Readiness digest differs")
+    if manifest["gates"].get("authorization_mode") == "delegated_autonomous_after_diagnostics":
+        return _verify_delegated(manifest, receipt, readiness_hash)
     required = {"schema", "role", "human_message_id", "human_thread_id", "approved_manifest_sha256",
                 "approved_readiness_receipt_sha256", "approved_at_utc", "message_verified_from_app",
                 "verification_evidence_sha256", "scope"}
@@ -160,3 +165,40 @@ def verify_approval(manifest, receipt, readiness_receipt):
     return {"approved_manifest_sha256": fingerprint(manifest), "approved_readiness_receipt_sha256": readiness_hash,
             "human_message_id": receipt["human_message_id"], "human_thread_id": receipt["human_thread_id"],
             "verification_evidence_sha256": receipt["verification_evidence_sha256"]}
+
+
+def _verify_delegated(manifest, receipt, readiness_hash):
+    """The user authorized autonomous execution; the agent froze these hashes later.
+
+    This is not a human approval of an unseen manifest. App evidence must be
+    independently read and retained, just as for the legacy approval receipt.
+    """
+    required = {"schema", "role", "scope", "human_authorization", "frozen_manifest_sha256",
+                "frozen_readiness_receipt_sha256", "frozen_at_utc", "coordinator_review_sha256"}
+    _require(isinstance(receipt, dict) and set(receipt) == required, "Complete delegated execution receipt required")
+    _placeholders(receipt)
+    _require(receipt["schema"] == "delegated_main_execution_receipt_v1" and receipt["role"] == "assistant"
+             and receipt["scope"] == "main_prefixes_and_continuations", "Invalid delegated execution scope")
+    authority = receipt["human_authorization"]
+    authority_fields = {"schema", "role", "human_message_id", "human_thread_id", "verified_at_utc",
+                        "message_verified_from_app", "verification_evidence_sha256", "authorized_actions"}
+    _require(isinstance(authority, dict) and set(authority) == authority_fields,
+             "Actual human autonomous instruction is required")
+    _require(authority["schema"] == "human_autonomous_main_authorization_v1" and authority["role"] == "user"
+             and authority["message_verified_from_app"] is True, "Assistant cannot grant itself authority")
+    actions = ["freeze_main_after_successful_diagnostics", "execute_main_prefixes_and_continuations",
+               "select_one_free_compatible_gpu", "monitor_every_30_minutes"]
+    _require(authority["authorized_actions"] == actions, "Human authorization omits required delegated actions")
+    _require(all(isinstance(authority[key], str) and HUMAN_ID.fullmatch(authority[key])
+                 for key in ("human_message_id", "human_thread_id")), "Actual human app message/thread IDs required")
+    for value in (authority["verification_evidence_sha256"], receipt["coordinator_review_sha256"]):
+        _require(isinstance(value, str) and SHA.fullmatch(value), "Verified authority and coordinator review evidence required")
+    _require(receipt["frozen_manifest_sha256"] == fingerprint(manifest)
+             and receipt["frozen_readiness_receipt_sha256"] == readiness_hash, "Delegation is bound to another frozen packet")
+    verified, frozen = _utc(authority["verified_at_utc"]), _utc(receipt["frozen_at_utc"])
+    _require(verified <= frozen <= datetime.now(timezone.utc), "Delegation verification/freeze timing is invalid")
+    _require(frozen < _utc(manifest["budget"]["absolute_cutoff_utc"]), "Freeze postdates the run cutoff")
+    return {"authorization_mode": "delegated_autonomous_after_diagnostics",
+            "frozen_manifest_sha256": fingerprint(manifest), "frozen_readiness_receipt_sha256": readiness_hash,
+            "human_message_id": authority["human_message_id"], "human_thread_id": authority["human_thread_id"],
+            "verification_evidence_sha256": authority["verification_evidence_sha256"]}

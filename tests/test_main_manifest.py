@@ -68,6 +68,65 @@ def synthetic_packet():
 
 
 class MainManifestTests(unittest.TestCase):
+    def delegated_packet(self):
+        manifest, _, ready = synthetic_packet()
+        manifest["gates"].update(authorization_mode="delegated_autonomous_after_diagnostics",
+            source_annotation_timing="independent_AI_source_first_human_audit_before_claims")
+        authority = {"schema": "human_autonomous_main_authorization_v1", "role": "user",
+            "human_message_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            "human_thread_id": "11111111-2222-3333-4444-555555555555", "verified_at_utc": "2000-01-01T00:00:00Z",
+            "message_verified_from_app": True, "verification_evidence_sha256": "3" * 64,
+            "authorized_actions": ["freeze_main_after_successful_diagnostics", "execute_main_prefixes_and_continuations",
+                "select_one_free_compatible_gpu", "monitor_every_30_minutes"]}
+        receipt = {"schema": "delegated_main_execution_receipt_v1", "role": "assistant",
+            "scope": "main_prefixes_and_continuations", "human_authorization": authority,
+            "frozen_manifest_sha256": fingerprint(manifest), "frozen_readiness_receipt_sha256": fingerprint(ready),
+            "frozen_at_utc": "2000-01-01T00:01:00Z", "coordinator_review_sha256": "4" * 64}
+        return manifest, receipt, ready
+
+    def test_delegation_distinguishes_user_authority_from_later_agent_freeze(self):
+        manifest, receipt, ready = self.delegated_packet()
+        checked = verify_approval(manifest, receipt, ready)
+        self.assertEqual(checked["authorization_mode"], "delegated_autonomous_after_diagnostics")
+        self.assertEqual(checked["frozen_manifest_sha256"], fingerprint(manifest))
+        self.assertNotIn("approved_manifest_sha256", checked)
+
+    def test_delegation_rejects_forged_authority_stale_packet_and_invalid_timing(self):
+        changes = [
+            lambda a: a.update(role="user"),
+            lambda a: a["human_authorization"].update(role="assistant"),
+            lambda a: a["human_authorization"].update(message_verified_from_app=False),
+            lambda a: a["human_authorization"].update(human_message_id="exec-not-human"),
+            lambda a: a["human_authorization"]["authorized_actions"].pop(),
+            lambda a: a.update(frozen_manifest_sha256="9" * 64),
+            lambda a: a.update(frozen_readiness_receipt_sha256="9" * 64),
+            lambda a: a.update(frozen_at_utc="1999-01-01T00:00:00Z"),
+            lambda a: a.update(frozen_at_utc="2200-01-01T00:00:00Z"),
+            lambda a: a.pop("coordinator_review_sha256"),
+        ]
+        for index, change in enumerate(changes):
+            with self.subTest(case=index):
+                manifest, receipt, ready = self.delegated_packet()
+                change(receipt)
+                with self.assertRaises(ManifestError):
+                    verify_approval(manifest, receipt, ready)
+
+    def test_delegation_does_not_replace_readiness_or_legacy_approval(self):
+        manifest, receipt, ready = self.delegated_packet()
+        ready["technical_checks_passed"] = False
+        manifest["gates"]["readiness_receipt_sha256"] = fingerprint(ready)
+        receipt["frozen_manifest_sha256"] = fingerprint(manifest)
+        receipt["frozen_readiness_receipt_sha256"] = fingerprint(ready)
+        with self.assertRaises(ManifestError):
+            verify_approval(manifest, receipt, ready)
+        manifest, receipt, ready = self.delegated_packet()
+        manifest["gates"].pop("authorization_mode")
+        with self.assertRaises(ManifestError):
+            validate_manifest(manifest)
+        manifest["gates"].pop("source_annotation_timing")
+        with self.assertRaises(ManifestError):
+            verify_approval(manifest, receipt, ready)
+
     def test_complete_synthetic_packet_is_bound_and_does_not_mutate_input(self):
         manifest, approval, ready = synthetic_packet()
         original = deepcopy(manifest)
