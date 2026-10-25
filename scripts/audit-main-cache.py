@@ -82,8 +82,10 @@ def main():
             require(not Path(name).is_absolute() and ".." not in Path(name).parts
                     and path.resolve().is_relative_to(review) and sha256(path.read_bytes()).hexdigest() == digest,
                     "Actual collection review packet changed")
-        require(read_json(root / phase / "phase-manifest.json")["manifest_sha256"] == fingerprint(manifest),
-                "Actual inference phase refers to another main")
+        actual_phase = read_json(root / phase / "phase-manifest.json")
+        require(actual_phase["manifest_sha256"] == fingerprint(manifest)
+                and actual_phase["CPU_preflight_sha256"] == sha256((folder / "preflight.json").read_bytes()).hexdigest(),
+                "Supplied CPU receipt differs from the receipt recorded by the actual inference phase")
     require(main_cycle.prefix_bundle(root / "prefixes", manifest["sample"]["group_ids"])
             == continuation_preflight["historical_prefix_bundle"], "Historical B/world/source bundle changed")
     requests, responses = rows(root / "ledger/requests.jsonl"), rows(root / "ledger/responses.jsonl")
@@ -260,6 +262,7 @@ def main():
     if unknown_spend:
         errors.append({"check": "accounting", "unknown_spend_requests": unknown_spend})
     analysis_inputs = [root / "main-manifest.json", root / "ledger/requests.jsonl", root / "ledger/responses.jsonl",
+        root / "prefixes/phase-manifest.json", root / "continuations/phase-manifest.json",
         root / "cpu-prepare/assigned-future-opportunities.json", root / "continuations/all-assigned-results.json"]
     for number, group in groups.items():
         prefix = root / f"prefixes/prefix/group-{number}"
