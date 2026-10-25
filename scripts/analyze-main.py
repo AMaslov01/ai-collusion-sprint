@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 from collusion_handoff.artifacts import atomic_json, fingerprint, read_json
-from collusion_handoff.main_analysis import analyze
+from collusion_handoff.main_analysis import analyze, verify_analysis_review_binding
 from collusion_handoff.main_cycle import annotation_receipt_name, approved_pipeline, verify_annotations
 from collusion_handoff.paired_analysis import require
 
@@ -28,6 +28,7 @@ def main():
     require(audit["schema"] == "main_cache_replay_v1" and audit["status"] == "passed_cache_only"
             and audit["manifest_sha256"] == fingerprint(manifest) and audit["new_model_calls"] == 0,
             "Matching successful production cache replay is required")
+    verify_analysis_review_binding(audit, args.review)
     for name, digest in audit["input_sha256"].items():
         path = root / name
         require(path.resolve().is_relative_to(root) and sha256(path.read_bytes()).hexdigest() == digest,

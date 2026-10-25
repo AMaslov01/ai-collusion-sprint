@@ -1,14 +1,35 @@
 """Scientific endpoint regressions on invented tasks; no native datasets/models."""
 
 from copy import deepcopy
+from hashlib import sha256
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
 
-from collusion_handoff.main_analysis import analyze, confirmed_groups, initial_proposal_outcomes
+from collusion_handoff.main_analysis import analyze, confirmed_groups, initial_proposal_outcomes, verify_analysis_review_binding
 from collusion_handoff.paired_analysis import AnalysisError
 from test_main_manifest import synthetic_packet
 
 
 class MainAnalysisTests(unittest.TestCase):
+    def test_changed_source_labels_or_reviewer_lock_cannot_change_population_after_replay(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "ai-source-annotations.json"
+            independent = root / "reviewer-root.json"
+            source.write_text('{"groups":{"998":{"harmful_future_agreement_present":false}}}')
+            independent.write_text('{"formation_status":"absent"}')
+            audit = {"review_files_sha256": {p.name: sha256(p.read_bytes()).hexdigest() for p in (source, independent)}}
+            verify_analysis_review_binding(audit, root)
+            for path in (source, independent):
+                original = path.read_bytes()
+                path.write_text('{"revised_after_replay":true}')
+                with self.assertRaises(AnalysisError):
+                    verify_analysis_review_binding(audit, root)
+                path.write_bytes(original)
+            with self.assertRaises(AnalysisError):
+                verify_analysis_review_binding({}, root)
+
     def test_initial_Q_separates_known_absence_from_missing_and_corrupt_measurement(self):
         rows = [{"result": {"evaluation": value}} for value in (
             {"Q": 1, "initial_proposal_Q": 0, "ledger_complete": True},

@@ -5,8 +5,24 @@ never become human-confirmed labels through this driver. No model clients.
 """
 
 from copy import deepcopy
+from hashlib import sha256
+from pathlib import Path
 
 from .paired_analysis import AnalysisError, require, summarize
+
+
+def verify_analysis_review_binding(audit, review):
+    """Keep the original source-only population mask after cache replay."""
+    inventory = audit.get("review_files_sha256")
+    require(isinstance(inventory, dict) and inventory, "Replay must bind the original collection review inventory")
+    root = Path(review).resolve()
+    for name, digest in inventory.items():
+        require(isinstance(name, str) and Path(name).name == name and name not in {".", ".."},
+                "Review inventory must contain confined filenames")
+        path = root / name
+        require(path.resolve().is_relative_to(root) and path.is_file()
+                and sha256(path.read_bytes()).hexdigest() == digest,
+                "Source labels/reviewer/reference packet changed after production cache replay")
 
 
 def initial_proposal_outcomes(outcomes):

@@ -257,6 +257,7 @@ def main():
         "new_model_calls": 0, "no_HTTP_client_constructed": True, "human_gold": False,
         "requests": len(requests), "calls_replayed": len(consumed), "accounted_tokens": total,
         "allocations": allocations, "checks": checks, "errors": errors,
+        "review_files_sha256": continuation_preflight["review_files_sha256"],
         "input_sha256": {str(p.relative_to(root)): sha256(p.read_bytes()).hexdigest() for p in analysis_inputs}}
     atomic_json(output / "audit.json", report)
     print(canonical({"status": report["status"], "calls_replayed": len(consumed), "errors": len(errors)}).decode())
