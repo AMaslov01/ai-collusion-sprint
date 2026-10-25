@@ -2,10 +2,12 @@
 # Explicit CPU preparation or separately dispatched GPU phase; no budget reset.
 set -euo pipefail
 CAN_SHA=${1:?Full committed code SHA}
-CAN_PHASE=${2:?calibration-prefixes-r3 or calibration-handoff-r3}
+CAN_PHASE=${2:?Explicit calibration prefix or handoff phase}
 CAN_MODE=${3:?cpu or gpu}
+CAN_CONTRACT=${4:-configs/calibration-r3.json}
+case "$CAN_CONTRACT" in configs/calibration-r3.json) CAN_REVISION=r3;; configs/calibration-r4.json) CAN_REVISION=r4;; *) exit 2;; esac
 [[ "$CAN_SHA" =~ ^[0-9a-f]{40}$ ]]
-case "$CAN_PHASE" in calibration-prefixes-r3|calibration-handoff-r3) ;; *) exit 2;; esac
+case "$CAN_PHASE" in "calibration-prefixes-$CAN_REVISION"|"calibration-handoff-$CAN_REVISION") ;; *) exit 2;; esac
 case "$CAN_MODE" in cpu|gpu) ;; *) exit 2;; esac
 test "$(hostname)" = caniculus.appliedai.local
 test "$(id -un)" = a.maslov
@@ -14,19 +16,24 @@ umask 077
 CAN_PROJECT=/mnt/ssd/a.maslov/ai-collusion-sprint
 CAN_GLOBAL="$CAN_PROJECT/runs/readiness-cycle-v5-20261024"
 CAN_CODE="$CAN_PROJECT/code/$CAN_SHA"
-CAN_CONFIG="$CAN_CODE/configs/calibration-r3.json"
+CAN_CONFIG="$CAN_CODE/$CAN_CONTRACT"
 CAN_PROFILE="$CAN_CODE/configs/readiness-cycle-v5.json"
 CAN_RUN=$(jq -r .run_id "$CAN_CONFIG")
-test "$CAN_RUN" = calibration-r3-20261025
+test "$CAN_RUN" = "calibration-$CAN_REVISION-20261025"
 CAN_CHILD="$CAN_GLOBAL/$CAN_RUN"
-CAN_REVIEW="$CAN_PROJECT/inputs/calibration-r3-review-$CAN_SHA-$CAN_PHASE"
-CAN_CLOSURE="$CAN_REVIEW/closed-parent-receipt-05729ef.json"
+CAN_REVIEW="$CAN_PROJECT/inputs/calibration-$CAN_REVISION-review-$CAN_SHA-$CAN_PHASE"
+CAN_CLOSURE="$CAN_REVIEW/$(jq -r .parent_closure.file "$CAN_CONFIG")"
 CAN_PREFLIGHT="$CAN_CHILD/cpu-$CAN_PHASE-$CAN_SHA"
 CAN_MODEL="$CAN_PROJECT/inputs/Qwen3.8-27B-FP8/017b9c7af6b5689d5dd426a76e0bc077eb5ca20a"
 CAN_VENDOR="$CAN_PROJECT/dependencies/travel-tools-d0bc2174eea3b3737f6922b89897db4f21ea6f835f7354ee702edbbc9880b3bc"
 CAN_TASKS="$CAN_PROJECT/bootstrap/preparation-33d29710c408fd9851e9de0db5e436cc623b595c/task-data"
 CAN_IDENTITIES="$CAN_PROJECT/bootstrap/preparation-31f9c028bd8615c4b7648144c278ed0d6ffbe56c"
 CAN_INDEPENDENT="$CAN_PROJECT/inputs/calibration-r3-independent-v2"
+if [ "$CAN_REVISION" = r4 ]; then CAN_INDEPENDENT="$CAN_PROJECT/inputs/calibration-r4-independent-v1"; fi
+CAN_OBSERVER=$(jq -r .independent_cpu_scripts.observer.file "$CAN_CONFIG")
+CAN_GRADER=$(jq -r .independent_cpu_scripts.grader.file "$CAN_CONFIG")
+test "$(basename "$CAN_OBSERVER")" = "$CAN_OBSERVER"
+test "$(basename "$CAN_GRADER")" = "$CAN_GRADER"
 CAN_UPSTREAM=/opt/ai-collusion/sources/MemoryArena
 for CAN_PATH in "$CAN_PROJECT" "$CAN_GLOBAL" "$CAN_CODE" "$CAN_REVIEW" "$CAN_MODEL" "$CAN_VENDOR" "$CAN_TASKS" "$CAN_IDENTITIES" "$CAN_INDEPENDENT" "$CAN_PROJECT/cache" "$CAN_PROJECT/inputs/MemoryArena" "$CAN_PROJECT/inputs/travel-database"; do
  test "$(realpath "$CAN_PATH")" = "$CAN_PATH"
@@ -59,7 +66,7 @@ CAN_MOUNTS=()
 CAN_NETWORK=none
 CAN_ROOT_SUFFIX=,readonly
 CAN_WORK="$CAN_PREFLIGHT"
-CAN_NAME="a-maslov-ai-collusion-r3-cpu-$CAN_PHASE-${CAN_SHA:0:7}"
+CAN_NAME="a-maslov-ai-collusion-$CAN_REVISION-cpu-$CAN_PHASE-${CAN_SHA:0:7}"
 if [ "$CAN_MODE" = gpu ]; then
  CAN_DISPATCH="$CAN_REVIEW/dispatch-$CAN_PHASE.json"
  test "$(jq -r .status "$CAN_PREFLIGHT/preflight.json")" = passed_no_model_calls
@@ -115,7 +122,7 @@ if [ "$CAN_MODE" = gpu ]; then
  CAN_NETWORK=host
  CAN_ROOT_SUFFIX=
  CAN_WORK="$CAN_CHILD/$CAN_PHASE"
- CAN_NAME="a-maslov-ai-collusion-r3-$CAN_PHASE-${CAN_SHA:0:7}"
+ CAN_NAME="a-maslov-ai-collusion-$CAN_REVISION-$CAN_PHASE-${CAN_SHA:0:7}"
  CAN_MOUNTS+=(--gpus "device=$CAN_UUID" --mount "type=bind,src=$CAN_PREFLIGHT,dst=/preflight,readonly")
  # Protect old source/result/master paths through every /cycle alias.
  for CAN_PATH in "$CAN_GLOBAL"/*; do
@@ -152,7 +159,7 @@ sha256sum "$0" > "$CAN_WORK/launcher.sha256"
 { date -u; free -h; cat /proc/loadavg; df -hT "$CAN_PROJECT"; } > "$CAN_WORK/host-before.txt"
 CAN_COMMAND='exec python3 -m collusion_handoff.calibration_cycle > /work/supervisor.log 2>&1'
 if [ "$CAN_MODE" = cpu ]; then
- CAN_COMMAND='set -e; umask 077; python3 -m unittest discover -s /code/tests -v > /work/unittest.log 2>&1; python3 /code/scripts/probe-structured-output.py > /work/xgrammar.log 2>&1; python3 /code/scripts/probe-calibration-reference-interface.py --references /independent-reference/next-version-reference-interface-fixtures.json --namespace /independent-reference/calibration-r3-namespace-fixtures.json --visibility /independent-reference/calibration-r3-proposal-version-visibility-fixtures.json --output /work/reference-observations.json > /work/reference-observations.log 2>&1; python3 -B /independent-reference/probe_actual_reference_context_r3b.py --references /independent-reference/next-version-reference-interface-fixtures.json --namespace /independent-reference/calibration-r3-namespace-fixtures.json --visibility /independent-reference/calibration-r3-proposal-version-visibility-fixtures.json --output /work/independent-context-observations.json > /work/context.log 2>&1; python3 -B /independent-reference/compare_reference_observations_r3b.py --references /independent-reference/next-version-reference-interface-fixtures.json --namespace /independent-reference/calibration-r3-namespace-fixtures.json --visibility /independent-reference/calibration-r3-proposal-version-visibility-fixtures.json --factory-observations /work/reference-observations.json --context-observations /work/independent-context-observations.json --output /work/independent-reference-comparison.json > /work/comparison.log 2>&1; exec python3 -m collusion_handoff.calibration_cycle --preflight > /work/preflight.log 2>&1'
+ CAN_COMMAND='set -e; umask 077; python3 -m unittest discover -s /code/tests -v > /work/unittest.log 2>&1; python3 /code/scripts/probe-structured-output.py > /work/xgrammar.log 2>&1; python3 /code/scripts/probe-calibration-reference-interface.py --references /independent-reference/next-version-reference-interface-fixtures.json --namespace /independent-reference/calibration-r3-namespace-fixtures.json --visibility /independent-reference/calibration-r3-proposal-version-visibility-fixtures.json --output /work/reference-observations.json > /work/reference-observations.log 2>&1; python3 -B "/independent-reference/$CALIBRATION_OBSERVER" --references /independent-reference/next-version-reference-interface-fixtures.json --namespace /independent-reference/calibration-r3-namespace-fixtures.json --visibility /independent-reference/calibration-r3-proposal-version-visibility-fixtures.json --output /work/independent-context-observations.json > /work/context.log 2>&1; python3 -B "/independent-reference/$CALIBRATION_GRADER" --references /independent-reference/next-version-reference-interface-fixtures.json --namespace /independent-reference/calibration-r3-namespace-fixtures.json --visibility /independent-reference/calibration-r3-proposal-version-visibility-fixtures.json --factory-observations /work/reference-observations.json --context-observations /work/independent-context-observations.json --output /work/independent-reference-comparison.json > /work/comparison.log 2>&1; exec python3 -m collusion_handoff.calibration_cycle --preflight > /work/preflight.log 2>&1'
 else
  CAN_INTENT="$CAN_CHILD/launch-intent-$CAN_PHASE.json"
  test ! -e "$CAN_INTENT"
@@ -160,9 +167,10 @@ else
  sync -d "$CAN_INTENT"
  CAN_MOUNTS+=(--mount "type=bind,src=$CAN_INTENT,dst=/cycle/$CAN_RUN/$(basename "$CAN_INTENT"),readonly")
 fi
-CAN_CONTAINER_ID=$(docker create --name "$CAN_NAME" --label owner=a.maslov --label scope=calibration-r3 --label "computation=$CAN_MODE" --label "parent_budget_run=readiness-cycle-v5-20261024" --label "adapter_commit=$CAN_SHA" \
+CAN_CONTAINER_ID=$(docker create --name "$CAN_NAME" --label owner=a.maslov --label "scope=calibration-$CAN_REVISION" --label "computation=$CAN_MODE" --label "parent_budget_run=readiness-cycle-v5-20261024" --label "adapter_commit=$CAN_SHA" \
  --user "$(id -u):$(id -g)" --restart=no --network="$CAN_NETWORK" --cpus 8 --memory 64g --pids-limit 1024 --shm-size 8g --cap-drop=ALL --security-opt=no-new-privileges \
  --env HOME=/work/home --env TMPDIR=/work/tmp --env PYTHONDONTWRITEBYTECODE=1 --env "ADAPTER_COMMIT=$CAN_SHA" --env "CYCLE_PHASE=$CAN_PHASE" --env "PACKAGE_DEADLINE_UNIX=$CAN_END" \
+ --env "CALIBRATION_CONTRACT=$CAN_CONTRACT" --env "CALIBRATION_OBSERVER=$CAN_OBSERVER" --env "CALIBRATION_GRADER=$CAN_GRADER" \
  --env HF_HOME=/cache/hf --env HF_HUB_OFFLINE=1 --env TRANSFORMERS_OFFLINE=1 --env XDG_CACHE_HOME=/cache/xdg \
  --env TORCH_HOME=/cache/torch --env TORCHINDUCTOR_CACHE_DIR=/cache/torchinductor --env TRITON_CACHE_DIR=/cache/triton --env TORCH_EXTENSIONS_DIR=/cache/torch-extensions \
  --env VLLM_CACHE_ROOT=/cache/vllm --env CUDA_CACHE_PATH=/cache/cuda --env NUMBA_CACHE_DIR=/cache/numba \

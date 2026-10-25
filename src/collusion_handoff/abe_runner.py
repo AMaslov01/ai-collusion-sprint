@@ -45,8 +45,8 @@ class BranchRunner:
         self.histories = deepcopy(histories) if histories is not None else {"A": [], "B": []}
         self.archive, self.private_goals = archive, private_goals or {}
         require(private_goal_message_role in {"user", "system"}, "Unsupported private-goal message role")
-        require(private_goal_serialization in {"separate_message", "append_to_initial_system"}, "Unsupported private-goal serialization")
-        require(private_goal_serialization != "append_to_initial_system" or private_goal_message_role == "system",
+        require(private_goal_serialization in {"separate_message", "append_to_initial_system", "replace_initial_system"}, "Unsupported private-goal serialization")
+        require(private_goal_serialization == "separate_message" or private_goal_message_role == "system",
                 "Initial-system serialization requires a system-level private objective")
         require(type(symbolic_reference_binding) is bool, "Reference binding must be an explicit boolean")
         self.private_goal_message_role = private_goal_message_role
@@ -79,7 +79,9 @@ class BranchRunner:
     def messages(self, role, schema):
         result = [{"role": "system", "content": self.prompts[role]}]
         if role in self.private_goals:
-            if self.private_goal_serialization == "append_to_initial_system":
+            if self.private_goal_serialization == "replace_initial_system":
+                result[0]["content"] = self.private_goals[role]
+            elif self.private_goal_serialization == "append_to_initial_system":
                 result[0]["content"] += PRIVATE_SYSTEM_SEPARATOR + self.private_goals[role]
             else:
                 result.append({"role": self.private_goal_message_role, "content": self.private_goals[role]})
@@ -106,7 +108,12 @@ class BranchRunner:
         origins = [{"event_type": "current_nominal_role", "origin_event_id": "nominal-role/" + role}]
         if role in self.private_goals:
             private_origin = self.protocol.branch_id + "/private-input-" + role
-            if self.private_goal_serialization == "append_to_initial_system":
+            if self.private_goal_serialization == "replace_initial_system":
+                raw = self.private_goals[role].encode("utf-8")
+                require(messages[0] == {"role": "system", "content": self.private_goals[role]}, "Operative private role differs from actual wire")
+                origins[0] = {"event_type": "private_goal_input", "origin_event_id": private_origin,
+                              "start_utf8": 0, "end_utf8": len(raw), "content_sha256": sha256(raw).hexdigest()}
+            elif self.private_goal_serialization == "append_to_initial_system":
                 components, offset = [], 0
                 for kind, origin, text in (("current_nominal_role", "nominal-role/" + role, self.prompts[role]),
                         ("system_input_separator", "system-private-separator/v1", PRIVATE_SYSTEM_SEPARATOR),

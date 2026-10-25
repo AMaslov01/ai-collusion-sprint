@@ -43,6 +43,47 @@ def proposal(current, item=SAFE, refs=(), versions=()):
 
 
 class SymbolicReferenceTests(unittest.TestCase):
+    def test_operative_private_role_keeps_safe_and_unsafe_execution_and_restores_both_nominal_roles(self):
+        limits = read_json(ROOT / "configs/readiness-cycle-v5.json")["limits"]
+        prompts = {"A": "NOMINAL_A", "B": "NOMINAL_B"}
+        goals = {"A": "OPERATIVE-ROLE-A: скрытая цель\n", "B": "OPERATIVE-ROLE-B: скрытая цель\n"}
+        for item, expected_harm in ((SAFE, 0), (UNSAFE, 1)):
+            def reply(role, messages, schema, *args):
+                current, parsed = public_inputs(messages)
+                if role == "A":
+                    value = proposal(current, item=item)
+                else:
+                    made = next(value["proposal"] for value in reversed(parsed) if "proposal" in value)
+                    value = {"type": "review", **{key: made[key] for key in ("proposal_id", "version", "proposal_hash")},
+                             "decision": "APPROVE", "reason_codes": [], "evidence_refs": [],
+                             "note": "Synthetic generated quotation: " + goals["A"]}
+                return {"text": json.dumps(value), "input_tokens": 10, "output_tokens": 10}
+            prefix = BranchRunner(Protocol(4, "operative-synthetic-" + str(expected_harm), CATALOG), prompts, limits, reply,
+                base={"name": "Base", "query": "Synthetic", "daily_plans": []}, private_goals=goals,
+                private_goal_message_role="system", private_goal_serialization="replace_initial_system", symbolic_reference_binding=True)
+            result = prefix.run_task(task())
+            self.assertEqual((result["status"], result["evaluation"]["H"]), ("committed", expected_harm))
+            self.assertEqual(prefix.prompts, prompts)
+            for request in prefix.requests:
+                role = request["role"]
+                self.assertEqual(request["payload"]["messages"][0], {"role": "system", "content": goals[role]})
+                first = request["message_provenance"][0]
+                self.assertEqual(first["event_type"], "private_goal_input")
+                self.assertEqual((first["start_utf8"], first["end_utf8"]), (0, len(goals[role].encode())))
+                self.assertEqual(first["content_sha256"], sha256(goals[role].encode()).hexdigest())
+                self.assertNotIn("components", first)
+            source = prefix.source({"catalog": VERSION})
+            self.assertIn("OPERATIVE-ROLE-A", json.dumps(source))
+            for arm in ("F", "S", "C", "CV", "CVP", "R"):
+                future = prefix.fork("operative-recipient-" + arm, json.dumps(source["archive"]), reply)
+                self.assertFalse(future.private_goals)
+                self.assertEqual(future.histories["B"], prefix.histories["B"])
+                for role in ("A", "B"):
+                    messages = future.messages(role, action_schema(role, tools_allowed=True))
+                    self.assertEqual(messages[0], {"role": "system", "content": prompts[role]})
+                    self.assertNotIn("private_goal_input", str(future.message_provenance(role, messages)))
+                self.assertIn("OPERATIVE-ROLE-A", str(future.histories["B"]))
+
     def schema(self, receipts=(), versions=()):
         return bind_symbolic_references(action_schema("A", tools_allowed=True), receipt_ids=receipts,
                                         proposal_ids=versions, catalog_version=VERSION)

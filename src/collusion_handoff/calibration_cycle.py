@@ -15,7 +15,7 @@ from .memory import require, strict_json
 
 
 CODE, ROOT, WORK, REVIEW = map(Path, ("/code", "/cycle", "/work", "/review"))
-CONFIG = "configs/calibration-r3.json"
+CONFIG = os.environ.get("CALIBRATION_CONTRACT", "configs/calibration-r3.json")
 
 
 def file_sha(path):
@@ -106,8 +106,11 @@ def unfinished_result(task_id, branch, requests, reason, accounting_error=None):
 
 def settings():
     from .abe_runner import PRIVATE_SYSTEM_SEPARATOR
+    require(CONFIG in {"configs/calibration-r3.json", "configs/calibration-r4.json"}, "Unknown calibration contract")
+    revision = "r4" if CONFIG.endswith("r4.json") else "r3"
     amendment = read_json(CODE / CONFIG)
-    require(amendment["schema"] == "bounded_DEV_calibration_amendment_r3" and amendment["main_allowed"] is False,
+    require(amendment["schema"] == "bounded_DEV_calibration_amendment_" + revision and
+            amendment["run_id"] == "calibration-" + revision + "-20261025" and amendment["main_allowed"] is False,
             "No reviewed DEV calibration amendment")
     require(amendment["source_frame"]["ordered_ids"] == list(range(8, 20)) and
             amendment["source_frame"]["first_eligible"] == 2 and
@@ -140,8 +143,8 @@ def settings():
     effective["resource_authority"] = hardware["resource_authority"]
     effective["protocol"].update(amendment["protocol_overrides"])
     require(effective["protocol"]["private_goal_message_role"] == "system" and
-            effective["protocol"]["private_goal_serialization"] == "append_to_initial_system" and
-            effective["protocol"]["private_system_separator"] == PRIVATE_SYSTEM_SEPARATOR and
+            effective["protocol"]["private_goal_serialization"] == ("replace_initial_system" if revision == "r4" else "append_to_initial_system") and
+            (revision == "r4" or effective["protocol"]["private_system_separator"] == PRIVATE_SYSTEM_SEPARATOR) and
             effective["protocol"]["symbolic_reference_binding"] is True, "Required calibration options missing")
     require(effective["selection"]["arms"] == amendment["arms"] == ["F", "S", "C", "CV", "CVP", "R"], "Arm matrix changed")
     base = read_json(CODE / effective["base_runtime_config"])
@@ -274,7 +277,7 @@ def channel_probes(effective, base, groups, tokenizer):
     for number, group in groups.items():
         protocol = Protocol(number, namespace(effective["run_id"], number, "prefix"), {})
         runner = BranchRunner(protocol, prompts, effective["limits"], None, base=group["base_person"], private_goals=goals,
-                              private_goal_message_role="system", private_goal_serialization="append_to_initial_system", symbolic_reference_binding=True)
+                              private_goal_message_role="system", private_goal_serialization=effective["protocol"]["private_goal_serialization"], symbolic_reference_binding=True)
         task = group["tasks"][0]
         protocol.issue(task)
         for role in ("A", "B"):
@@ -283,6 +286,9 @@ def channel_probes(effective, base, groups, tokenizer):
             schema = runner.action_schema("A", tools_allowed=True) if role == "A" else action_schema("B", tools_allowed=True)
             messages = runner.messages(role, schema)
             system = messages[0]["content"]
+            replacing = effective["protocol"]["private_goal_serialization"] == "replace_initial_system"
+            require(system == (goals[role] if replacing else prompts[role] + "\n\n[PRIVATE OBJECTIVE]\n" + goals[role]),
+                    "Actual declared initial system text changed")
             normalized_system = system.strip()
             normalization = {"operation": "Pinned Qwen template |trim on the complete initial system content",
                 "template_sha256": sha256(tokenizer.chat_template.encode()).hexdigest(),
@@ -310,7 +316,9 @@ def channel_probes(effective, base, groups, tokenizer):
                         "Actual initial A wire differs from rendered private-role probe")
             result[f"group-{number}/{role}"] = {"first_roles": [item["role"] for item in messages[:2]],
                 "rendered_sha256": sha256(rendered.encode()).hexdigest(), "messages_sha256": fingerprint(messages),
-                "rendered_input_tokens": len(ids), "nominal_and_private_present_in_order": True,
+                "rendered_input_tokens": len(ids), "exact_declared_initial_system_preserved": True,
+                "private_goal_serialization": effective["protocol"]["private_goal_serialization"],
+                "stored_nominal_prompt_sha256": sha256(prompts[role].encode()).hexdigest(),
                 "system_boundary_normalization": normalization,
                 "rendered_artifact": str(rendered_file.relative_to(WORK)),
                 "actual_initial_A_wire": role == "A", "B_scope": "Channel preservation only; its actual proposal-bound first wire is audited after prefix"}
@@ -332,6 +340,12 @@ def preflight():
         atomic_json(WORK / "screening-flow.json", flow)
         require(len(groups) == 2, "Fewer than two eligible worlds in the fixed frame; no replacement")
         selected = flow["selected_worlds"]
+        if "fixed_selected_worlds" in amendment["source_frame"]:
+            require(selected == amendment["source_frame"]["fixed_selected_worlds"] == [8, 9], "Do not replace the predeclared repair worlds")
+            previous = amendment["source_frame"]["prior_source_registry"]
+            previous_path = ROOT / previous["path"]
+            require(previous_path.resolve().is_relative_to(ROOT.resolve()) and file_sha(previous_path) == previous["sha256"] and
+                    registry_digest(groups) == registry_digest(read_json(previous_path)["groups"]), "Repair changed original source tasks/Q/cap/base inputs")
         actor_preflight(effective, base, assets, WORK, selected)
         atomic_json(WORK / "assigned-prefix-opportunities.json", [{"group_id": number, "traveler_index": task["traveler_index"],
                     "task_id": task["task_id"]} for number, group in groups.items() for task in group["tasks"][:2]])
