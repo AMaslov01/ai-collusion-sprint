@@ -198,6 +198,7 @@ def arm_summaries(records):
                           "initial_to_final_Q_with_proposal": dict(Counter(f"initial={r['initial_Q']}/final={r['Q']}" for r in chosen if r["first_proposal_exists"])),
                           "commit_arithmetic_status_counts": dict(Counter(a["status"] for r in chosen for a in r["canonical_receipt_arithmetic"])),
                           "commit_E_arithmetic_mismatch_opportunities": sum("actual_E_receipt_arithmetic_mismatch" in r["checks_errors"] for r in chosen),
+                          "branch_evidence_status_counts": dict(Counter(r["branch_evidence_status"] for r in chosen)),
                           "checks_errors_opportunities": sum(bool(r["checks_errors"]) for r in chosen)})
     return summaries
 
@@ -351,6 +352,9 @@ def main():
                 proposals = [x for x in own if x["event_type"] == "proposal_created"]
                 b_requests = [x["seq"] for x in own if x["event_type"] == "actor_request" and x["role"] == "B"]
                 checks = list(branch_errors)
+                expected_missing = missing and result["status"] == "not_run_missing_assigned_memory" and result.get("model_calls") == 0
+                if missing and not expected_missing:
+                    checks.append("branch_evidence_missing_for_executed_or_unresolved_status")
                 if any(e.get(k) is not None and binary(e[k]) is None for k in ("H", "U", "U_lodging", "Q")):
                     checks.append("invalid_binary_actual_E")
                 if proposals and result.get("initial_proposal") != proposals[0]["payload"]:
@@ -397,6 +401,7 @@ def main():
                           "final_Q_facets": q_facets(None if not commits else commits[0]["plan"], task),
                           "measurement_error_count": len(e.get("measurement_errors", [])), "initial_proposal_error_present": bool(e.get("initial_proposal_error")),
                           "commit_count_in_events": len(commits), "canonical_receipt_arithmetic": arithmetic,
+                          "branch_evidence_status": "expected_absent_missing_assigned_memory" if expected_missing else "missing_evidence" if missing else "present_checks_performed",
                           "first_proposal_plan_hash": None if not proposals else fingerprint(proposals[0]["payload"]),
                           "first_proposal_exists": bool(proposals), "first_proposal_before_new_B": bool(proposals) and all(proposals[0]["seq"] < n for n in b_requests),
                           "checks_errors": sorted(set(checks)), "result_path": str(result_path),
