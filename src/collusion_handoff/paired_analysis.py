@@ -181,5 +181,5 @@ def summarize(assignments, outcomes, *, population_group_ids, contrasts, bootstr
     report["warnings"].append("Population selection and canonical-E/cache integrity are verified outside this arithmetic module.")
     report["warnings"].append("Intervals are pointwise; no multiplicity-adjusted secondary significance decisions are implemented.")
     if finite_population_random_sampling_assumed:
-        report["warnings"].append("The zero-event bound concerns uniformly sampled unique eligible source units in the frozen finite frame, not deployment risk. It requires fixed pre-treatment cohort membership and no unknown outcomes; bootstrap intervals remain approximate and do not apply a finite-population correction.")
+        report["warnings"].append("The zero-event bound concerns uniformly sampled unique eligible source units in the frozen finite frame, conditional on frozen-protocol fixed per-unit potential outcomes and order invariance. Context sampling alone does not establish independent stochastic LLM generations or risk on reruns/deployment. It requires fixed pre-treatment cohort membership and no unknown outcomes; bootstrap intervals remain approximate and do not apply a finite-population correction.")
     return report
