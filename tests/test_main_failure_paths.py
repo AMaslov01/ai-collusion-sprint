@@ -3,6 +3,7 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -10,6 +11,8 @@ from collusion_handoff.abe_cycle import namespace
 from collusion_handoff.abe_runner import ServiceFailure
 from collusion_handoff.artifacts import append_event, atomic_json, read_json
 from collusion_handoff.main_cycle import initialize_phase_assignments, finalize_phase_assignments, continuation_group
+from collusion_handoff.artifacts import fingerprint
+from collusion_handoff import main_cycle
 import test_main_cycle as synthetic_main
 
 
@@ -19,6 +22,39 @@ class MainFailurePathTests(unittest.TestCase):
                     "future_task_indices": [3, 4], "prefix_condition_by_group": {"404": "private_goal_induction"}}}
         groups = {404: {"tasks": [{"task_id": f"synthetic-t{index}"} for index in range(1, 5)]}}
         return manifest, groups, {"run_id": "synthetic-main"}
+
+    def test_numerical_mode_failure_precedes_HTTP_client_and_preserves_unknown_assignments(self):
+        with TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            locations = {"/cycle": base / "cycle", "/work": base / "work", "/review": base / "review",
+                         "/code": base / "code", "/preflight": base / "preflight"}
+            manifest, groups, config = self.assignment()
+            config["runtime_hardware_override"] = {"synthetic": "Expected numerical mode"}
+            atomic_json(locations["/cycle"] / "cpu-prepare/private-task-registry.json", {"groups": groups})
+            atomic_json(locations["/preflight"] / "preflight.json", {
+                "schema": "main_cpu_preflight_v1", "phase": "prefixes", "status": "passed_no_model_calls",
+                "manifest_sha256": fingerprint(manifest), "registry_sha256": main_cycle.registry_digest(groups),
+                "review_files_sha256": {}, "prepared_files_sha256": {}, "files": {}})
+            (locations["/cycle"] / "ledger").mkdir()
+            (locations["/cycle"] / "ledger/requests.jsonl").write_bytes(b"")
+
+            def path(value):
+                return locations.get(str(value), Path(value))
+
+            with patch.object(main_cycle, "Path", side_effect=path), \
+                 patch.object(main_cycle, "approved_pipeline", return_value=(manifest, config, {}, {}, {})), \
+                 patch.dict("os.environ", {"MAIN_PHASE": "prefixes"}), patch.object(sys, "argv", ["main", "--client"]), \
+                 patch("collusion_handoff.calibration_cycle.verify_sm89_runtime", side_effect=RuntimeError("Synthetic numerical-mode mismatch")) as guard, \
+                 patch("httpx.Client") as client:
+                with self.assertRaisesRegex(RuntimeError, "numerical-mode mismatch"):
+                    main_cycle.main()
+            guard.assert_called_once_with(config)
+            client.assert_not_called()
+            report = read_json(locations["/work"] / "all-assigned-results.json")
+            self.assertEqual(report["assigned"], 12)
+            for row in report["observed"]:
+                self.assertEqual(row["result"]["evaluation"], {"H": None, "U": None, "Q": None})
+                self.assertEqual(row["result"]["model_calls"], 0)
 
     def test_service_failure_before_client_keeps_prefix_and_all_future_tasks_unknown(self):
         with TemporaryDirectory() as temporary:

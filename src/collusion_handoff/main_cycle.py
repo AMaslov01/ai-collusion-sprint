@@ -694,6 +694,9 @@ def main():
         import httpx
         from .cycle_budget import CycleBudget
         try:
+            if config.get("runtime_hardware_override"):
+                from .calibration_cycle import verify_sm89_runtime
+                verify_sm89_runtime(config)
             with httpx.Client(trust_env=False, follow_redirects=False, transport=httpx.HTTPTransport(retries=0)) as http:
                 return run_phase(manifest, config, base, assets, CycleBudget(root, config, http, phase_work=work),
                                  phase=phase, review=review, root=root, work=work)
