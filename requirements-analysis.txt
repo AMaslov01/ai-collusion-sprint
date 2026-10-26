@@ -1,0 +1,4 @@
+# Minimal arithmetic environment; the tested full runtime is pinned by OCI digest.
+numpy==2.2.6
+jsonschema==4.26.0
+httpx==0.28.1

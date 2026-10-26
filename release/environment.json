@@ -1,0 +1,16 @@
+{
+  "schema": "memcontrast_recorded_environment_v1",
+  "observed_on": "2026-10-26",
+  "platform": "linux/amd64",
+  "image": "vllm/vllm-openai@sha256:6ee133356d49ed24cee03dd0cda3d3980279a11c107ce3e752c89e76540f41c9",
+  "image_id": "sha256:bd8a5d7a8774800c92d714c0c226b32c1863f929150f36efd610aebcd12a335d",
+  "python": "3.12.3",
+  "packages": {
+    "numpy": "2.2.6", "jsonschema": "4.26.0", "httpx": "0.28.1", "openai": "3.35.1",
+    "transformers": "5.19.0", "tokenizers": "0.23.3", "huggingface-hub": "2.2.0",
+    "torch": "2.13.0+cu130", "vllm": "0.32.0"
+  },
+  "external_travel_tools": {"pandas": "2.2.3", "pytz": "2025.2", "tzdata": "2025.2"},
+  "scope": "OCI digest pins the full environment; package list records selected libraries, not a complete pip lock",
+  "inference_hardware": "NVIDIA L40, SM89 FP8 Marlin weight-only; BF16 activations/KV; not native FP8 H100"
+}

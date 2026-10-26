@@ -1,0 +1,9 @@
+Processing /work/source
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: memcontrast
+  Building wheel for memcontrast (pyproject.toml): started
+  Building wheel for memcontrast (pyproject.toml): finished with status 'done'
+  Created wheel for memcontrast: filename=memcontrast-0.1.0-py3-none-any.whl size=144060 sha256=dd7ca8d7493bcb1b710f19c6f69601b4b71159e148da4c457e7cefae326d8ae3
+  Stored in directory: /tmp/pip-ephem-wheel-cache-za_rx2qc/wheels/d8/6d/32/5a1c25d63df0636f8932414e1470315f4f6612ab07c611bc9d
+Successfully built memcontrast

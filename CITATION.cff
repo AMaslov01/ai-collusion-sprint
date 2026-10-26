@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "If you use MemContrast, cite this repository and the upstream resources listed in DATA.md."
+title: "MemContrast: Selective Memory Handoffs After Induced Collusion"
+type: software
+version: 0.1.0
+date-released: 2026-10-26
+url: "https://github.com/AMaslov01/ai-collusion-sprint"
+authors:
+  - family-names: Maslov
+    given-names: Artemiy
+    affiliation: ITMO University
+  - family-names: Mitselovskiy
+    given-names: Artemiy
+    affiliation: ITMO University
