@@ -26,13 +26,6 @@
     "prompts/actors/private-a-v4.txt": "5a590b95bc30aea0ec87c457b12d91adef718fa791c9fd0b64295b4db142e27c",
     "prompts/actors/private-b-v4.txt": "1cdc0f40ea4212401034a66c4521efe968014fbf4b14710e12c3fde4247a8b5f",
     "prompts/actors/reviewer-v4.txt": "61e960e1a5d7d045ffcc07f02f8c09234f1b23cb379de1b0e15cf13cf1bcdc97",
-    "prompts/diagnostics/calibration-r3.md": "b120e456c0f38c1c17626ae7e63312a4ac5ee96f1d26b6bea599c1d676609a58",
-    "prompts/diagnostics/calibration-r4.md": "f6b9b720e1e3c4d61bd6ce6ad00b458f547d53e6898186cc6639cb3ed12725c6",
-    "prompts/diagnostics/group1-source-audit.md": "92f2160a18c39998e3bc2fc343cc5f5cbbf0ad0fc039ff1e3f40794542271256",
-    "prompts/diagnostics/readiness-cycle-v4.md": "149fc5ecadb7f0e339e0a2e4c71641bab6c4cc20b80ba7095d294079bae7ddd4",
-    "prompts/diagnostics/readiness-cycle-v5-city-r2.md": "6b75594675e6a8b07ee653ca026789b541cccaf633bff72a13b2fec41d4f5265",
-    "prompts/diagnostics/readiness-cycle-v5.md": "7716146f38195fc79b6a9c28df1c4bdf1ba560811fcf4f5ca80a8619a30e1fb7",
-    "prompts/diagnostics/repair-run-cycle-v3.md": "ececc7633ed6400dbed72d84917f0608a287ffe9b4a20f758a0dab65a121f6af",
     "prompts/memory/extract-v3.txt": "f10959a5feba1cdc0217c632fc8dc4a911f0ae3e55659fcb09857f61c22bba29",
     "prompts/memory/extract-v4.txt": "4476c2912880b7d7b2f713b7e955f4b327fc24f6789964e5ac9978787833e9f4",
     "prompts/memory/extract-v5.txt": "89ddb3f1e93b548d97208e49b7ec5e57eda5605bd246cfe4a4d0bbcb591cce01",
@@ -96,5 +89,15 @@
     "src/collusion_handoff/smoke.py": "04a2e7dc6811ee134cb795e648ef2c090e209b231911e6072fc38f0fbf7ea1e1",
     "src/collusion_handoff/source_segments.py": "7b1c74303971c873a8efffd129ffcff67a56aa13724ed6886c252e5a0168f121",
     "src/collusion_handoff/task_failure_evidence.py": "4aaa59e5b4be5de356180cc4ad243366670ff2a7cf892e90948afaf51890f896"
-  }
+  },
+  "omitted_historical_docs": {
+    "prompts/diagnostics/calibration-r3.md": "b120e456c0f38c1c17626ae7e63312a4ac5ee96f1d26b6bea599c1d676609a58",
+    "prompts/diagnostics/calibration-r4.md": "f6b9b720e1e3c4d61bd6ce6ad00b458f547d53e6898186cc6639cb3ed12725c6",
+    "prompts/diagnostics/group1-source-audit.md": "92f2160a18c39998e3bc2fc343cc5f5cbbf0ad0fc039ff1e3f40794542271256",
+    "prompts/diagnostics/readiness-cycle-v4.md": "149fc5ecadb7f0e339e0a2e4c71641bab6c4cc20b80ba7095d294079bae7ddd4",
+    "prompts/diagnostics/readiness-cycle-v5-city-r2.md": "6b75594675e6a8b07ee653ca026789b541cccaf633bff72a13b2fec41d4f5265",
+    "prompts/diagnostics/readiness-cycle-v5.md": "7716146f38195fc79b6a9c28df1c4bdf1ba560811fcf4f5ca80a8619a30e1fb7",
+    "prompts/diagnostics/repair-run-cycle-v3.md": "ececc7633ed6400dbed72d84917f0608a287ffe9b4a20f758a0dab65a121f6af"
+  },
+  "scope": "Present original code, prompts, schemas and configs match frozen bytes; omitted diagnostic notes remain in the original Git revision"
 }

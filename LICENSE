@@ -6,7 +6,7 @@ Scope: this license covers original MemContrast source, scripts, schemas,
 prompts, synthetic fixtures and author-produced numeric analysis outputs.
 It does not grant rights to third-party datasets, model weights, upstream
 MemoryArena code, or upstream-derived portions of native_data.py. See
-THIRD_PARTY_NOTICES.md for the explicit exception and unresolved permissions.
+docs/reproducibility.md for the explicit exception and unresolved permissions.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of the software and associated documentation files covered by the scope above

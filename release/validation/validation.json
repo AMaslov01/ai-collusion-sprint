@@ -1,0 +1,41 @@
+{
+  "schema": "memcontrast_release_validation_v1",
+  "date": "2026-10-26",
+  "execution": "caniculus nonroot CPU Docker; network=none; no GPU; no new inference",
+  "public_tree_test": {
+    "tests_run": 175,
+    "skipped": 3,
+    "errors": 0,
+    "failures": 0,
+    "excluded_file": "tests/test_actor_gateway.py",
+    "exclusion_reason": "Requires separately acquired pinned upstream checkout",
+    "log": "public-tests.log",
+    "scope": "Fresh tracked-only tree after removing historical files"
+  },
+  "public_analysis": {
+    "status": "all_frozen_analysis_fields_equal",
+    "new_model_calls": 0,
+    "numpy_version": "2.2.6",
+    "log": "public-analysis.log",
+    "scope": "Numeric projection arithmetic; no authentication of withheld raw text"
+  },
+  "full_recorded_replay": {
+    "status": "passed_cache_only",
+    "calls_replayed": 4909,
+    "checks": 160,
+    "errors": 0,
+    "new_model_calls": 0,
+    "analysis_byte_identical": true,
+    "audit_byte_identical": true,
+    "analysis_sha256": "5bbbb4cb2a1aac9f37059b1db1e246e8673388938b475953c34cbc95cd1ceaa9",
+    "audit_sha256": "aa5405d3c3b04d00316299a7695b2a6e946963eb13d8783df4b8774b2aabca34",
+    "runtime": "full-replay-runtime.json"
+  },
+  "packaging": {
+    "wheel_build": "passed offline, setuptools 80.10.2",
+    "log": "wheel-build.log"
+  },
+  "frozen_code": "a0548b748c7c749ae8c75baa86aec4f207f86375",
+  "human_gold": false,
+  "raw_trace_publication": false
+}

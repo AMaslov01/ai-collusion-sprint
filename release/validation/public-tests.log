@@ -176,6 +176,6 @@ test_single_system_serialization_has_exact_component_bytes_and_origin_based_fork
 test_system_goal_optin_and_both_removed_after_actual_fork (test_symbolic_references.SymbolicReferenceTests.test_system_goal_optin_and_both_removed_after_actual_fork) ... ok
 
 ----------------------------------------------------------------------
-Ran 175 tests in 3.801s
+Ran 175 tests in 3.816s
 
 OK (skipped=3)

@@ -1,0 +1,56 @@
+{
+  "container": "/a-maslov-memcontrast-public-replay-a0548b7-20261026-1",
+  "image": "sha256:bd8a5d7a8774800c92d714c0c226b32c1863f929150f36efd610aebcd12a335d",
+  "user": "4200509:4200509",
+  "started_at": "2026-10-26T10:45:55.878745463Z",
+  "finished_at": "2026-10-26T11:06:03.502432612Z",
+  "exit_code": 0,
+  "OOMKilled": false,
+  "network": "none",
+  "device_requests": null,
+  "devices": [],
+  "CPU": 8,
+  "RAM_bytes": 68719476736,
+  "scientific_mounts": [
+    {
+      "destination": "/code",
+      "writable": false
+    },
+    {
+      "destination": "/control",
+      "writable": false
+    },
+    {
+      "destination": "/cycle",
+      "writable": false
+    },
+    {
+      "destination": "/database",
+      "writable": false
+    },
+    {
+      "destination": "/identities",
+      "writable": false
+    },
+    {
+      "destination": "/main-data",
+      "writable": false
+    },
+    {
+      "destination": "/model",
+      "writable": false
+    },
+    {
+      "destination": "/review",
+      "writable": false
+    },
+    {
+      "destination": "/vendor",
+      "writable": false
+    },
+    {
+      "destination": "/opt/ai-collusion/sources/MemoryArena",
+      "writable": false
+    }
+  ]
+}

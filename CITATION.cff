@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-message: "If you use MemContrast, cite this repository and the upstream resources listed in DATA.md."
+message: "If you use MemContrast, cite this repository and the upstream resources listed in docs/reproducibility.md."
 title: "MemContrast: Selective Memory Handoffs After Induced Collusion"
 type: software
 version: 0.1.0
