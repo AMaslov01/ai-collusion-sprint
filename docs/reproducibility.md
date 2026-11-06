@@ -7,23 +7,13 @@ categorical source labels, prefix harm, the analysis specification, and the
 unchanged frozen report. It excludes task text, traveler names, gold answers,
 catalog rows, model messages and free-text source annotations.
 
-On caniculus, in the checkout and with the recorded OCI image already present:
-
-```bash
-python3 scripts/verify-release.py
-bash scripts/cpu-public.sh test /mnt/ssd/a.maslov/ai-collusion-sprint/test-new
-bash scripts/cpu-public.sh analysis /mnt/ssd/a.maslov/ai-collusion-sprint/analysis-new
-```
-
-Output directories must be new; parents must exist. Tests and analysis run in
+Tests and numerical analysis run in
 nonroot CPU Docker with `--network=none`, no GPU, read-only source, 4 CPU and
-16 GiB. The analysis writes `recomputed-analysis.json` and `run.log`. Every field
-computed by the unchanged `main_analysis.analyze` must match the frozen report.
-The public suite reports 175 tests, OK with 3 pinned-data skips. The upstream
-native-client integration file is explicitly excluded. Saved evidence is in
-[`release/validation/`](../release/validation/).
+16 GiB. No model endpoint or API key is needed. The analysis writes
+`recomputed-analysis.json` and checks every field computed by the unchanged
+`main_analysis.analyze` against the frozen report.
 
-For other readers, the equivalent Docker command on a Linux amd64 host is:
+From the checkout on a Linux amd64 host, with the pinned image already present:
 
 ```bash
 mkdir /absolute/new-output
@@ -41,20 +31,42 @@ docker run --rm --user "$(id -u):$(id -g)" --network=none \
   -B /code/scripts/reproduce-public-analysis.py --output /work/recomputed-analysis.json
 ```
 
-Replace the last line with `-B /code/scripts/test-public.py` for tests. The host
-UID must be nonzero. The full image is large; acquire it separately under the
-applicable resource rules. All author-side scientific execution is on caniculus.
+Replace `/absolute/new-output` with a new absolute output directory in both
+places; its parent directory must exist. Replace the last line with
+`-B /code/scripts/test-public.py` for tests. The host UID must be nonzero. The
+full image is large and must be acquired separately before the offline run.
 Python 3.12.3, NumPy 2.2.6 and the full OCI digest are recorded in
 [environment.json](../release/environment.json). `pyproject.toml` and
 `requirements-analysis.txt` describe core dependencies; the recorded image is
 the validated full environment. The wheel also builds offline with pinned
 setuptools 80.10.2; reproduction entrypoints use the source checkout for assets.
 
+The saved public suite run completed 175 tests with 3 pinned-data skips and
+no failures. The upstream native-client integration file is explicitly
+excluded. See the [validation record](../release/validation/validation.json)
+and [logs](../release/validation/). GitHub Actions checks artifact integrity;
+scientific test and analysis results come from the recorded author environment.
+
 The bootstrap uses PCG64, seed 20261026, 10000 paired source-group draws and
 linear quantiles. Unknown outcomes retain their denominators. The recomputed
 JSON omits full-run provenance fields appended by the production CLI, so its
 whole-file SHA is not the original report's SHA. This checks arithmetic from
 the released measurements, not the semantic validity of withheld source labels.
+
+### Author environment
+
+The authors run scientific code on caniculus. The convenience wrapper checks
+that host and account, so it is specific to the original research setup:
+
+```bash
+python3 scripts/verify-release.py
+bash scripts/cpu-public.sh test /mnt/ssd/a.maslov/ai-collusion-sprint/test-new
+bash scripts/cpu-public.sh analysis /mnt/ssd/a.maslov/ai-collusion-sprint/analysis-new
+```
+
+The recorded OCI image must already be present. Output directories must be new
+and their parents must exist. The wrapper saves stdout and stderr in `run.log`;
+the analysis also writes `recomputed-analysis.json`.
 
 ## Full recorded-call replay
 
@@ -129,4 +141,4 @@ The public numeric projection is produced by `export-public-analysis.py`,
 which checks all computed fields against the frozen analysis inside isolated
 Docker. It supports statistical recomputation, but cannot independently
 validate raw request reconstruction, canonical-E construction or semantic
-source labels. Genuine blinded human validation remains pending.
+source labels. Blinded human validation remains pending.
